@@ -52,9 +52,16 @@ export function createTestDb(): any {
     },
     async batch(statements: ShimStatement[]) {
       const results = [];
-      for (const s of statements) results.push(await s.run());
-      return results;
-      // Note: batch is not atomic like real D1, runs each statement sequentially
+      try {
+        db.exec('BEGIN');
+        for (const s of statements) results.push(await s.run());
+        db.exec('COMMIT');
+        return results;
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      }
+      // Note: batch is transactional like real D1; all statements commit together or all rollback
     },
     async exec(sql: string) {
       db.exec(sql);

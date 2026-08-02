@@ -33,30 +33,25 @@ export async function createOrganizationWithOwner(
   org: Organization,
   owner: OrganizationUser
 ): Promise<void> {
-  await db
+  const orgInsertStmt = db
     .prepare(`INSERT INTO organizations(${ORG_COLUMNS}) VALUES(?,?,?,?,?,?)`)
-    .bind(org.id, org.name, org.publicKey, org.encryptedPrivateKey, org.createdAt, org.updatedAt)
-    .run();
-  try {
-    await db
-      .prepare(`INSERT INTO organization_users(${ORG_USER_COLUMNS}) VALUES(?,?,?,?,?,?,?,?,?)`)
-      .bind(
-        owner.id,
-        owner.orgId,
-        owner.userId,
-        owner.email,
-        owner.role,
-        owner.status,
-        owner.encryptedOrgKey,
-        owner.createdAt,
-        owner.updatedAt
-      )
-      .run();
-  } catch (err) {
-    // Membership insert failed (e.g. duplicate (org_id, email)); do not leave an ownerless org.
-    await db.prepare('DELETE FROM organizations WHERE id = ?').bind(org.id).run();
-    throw err;
-  }
+    .bind(org.id, org.name, org.publicKey, org.encryptedPrivateKey, org.createdAt, org.updatedAt);
+
+  const ownerInsertStmt = db
+    .prepare(`INSERT INTO organization_users(${ORG_USER_COLUMNS}) VALUES(?,?,?,?,?,?,?,?,?)`)
+    .bind(
+      owner.id,
+      owner.orgId,
+      owner.userId,
+      owner.email,
+      owner.role,
+      owner.status,
+      owner.encryptedOrgKey,
+      owner.createdAt,
+      owner.updatedAt
+    );
+
+  await db.batch([orgInsertStmt, ownerInsertStmt]);
 }
 
 export async function getOrganization(db: D1Database, orgId: string): Promise<Organization | null> {

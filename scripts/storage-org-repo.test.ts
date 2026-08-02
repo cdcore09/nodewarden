@@ -84,4 +84,5 @@ test('duplicate member email in same org is rejected by unique index', async () 
       throw new Error('should not reach');
     })
   );
+  assert.equal(await getOrganization(db, 'o1b'), null);
 });
