@@ -1,0 +1,133 @@
+import { Env, Organization, OrganizationUser } from '../types';
+import { StorageService } from '../services/storage';
+import { jsonResponse, errorResponse } from '../utils/response';
+import { generateUUID } from '../utils/uuid';
+import { readActingDeviceIdentifier } from '../utils/device';
+import { notifyUserVaultSync } from '../durable/notifications-hub';
+import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
+import { parseCreateOrgRequest, organizationToResponse } from './org-shapes';
+
+const ORG_NOT_FOUND = 'Organization not found';
+
+async function writeOrgAudit(
+  storage: StorageService,
+  request: Request,
+  userId: string,
+  action: string,
+  orgId: string,
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
+  await writeAuditEvent(storage, {
+    actorUserId: userId,
+    action,
+    category: 'data',
+    level: action.includes('delete') ? 'security' : 'info',
+    targetType: 'organization',
+    targetId: orgId,
+    metadata: { ...metadata, ...auditRequestMetadata(request) },
+  });
+}
+
+// Loads the org ONLY if the requester is a confirmed owner; unauthorized and
+// nonexistent are indistinguishable to the caller (Global Constraint).
+async function getOwnedOrg(
+  storage: StorageService,
+  orgId: string,
+  userId: string
+): Promise<Organization | null> {
+  const orgUser = await storage.getOrgUserByOrgAndUser(orgId, userId);
+  if (!orgUser || orgUser.role !== 'owner' || orgUser.status !== 'confirmed') return null;
+  return storage.getOrganization(orgId);
+}
+
+// POST /api/organizations
+export async function handleCreateOrganization(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const user = await storage.getUserById(userId);
+  if (!user) return errorResponse('User not found', 404);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
+  const parsed = parseCreateOrgRequest(body);
+  if ('error' in parsed) return errorResponse(parsed.error, 400);
+
+  const now = new Date().toISOString();
+  const org: Organization = {
+    id: generateUUID(),
+    name: parsed.name,
+    publicKey: parsed.publicKey,
+    encryptedPrivateKey: parsed.encryptedPrivateKey,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const owner: OrganizationUser = {
+    id: generateUUID(),
+    orgId: org.id,
+    userId,
+    email: user.email,
+    role: 'owner',
+    status: 'confirmed',
+    encryptedOrgKey: parsed.key,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await storage.createOrganizationWithOwner(org, owner);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await writeOrgAudit(storage, request, userId, 'organization.create', org.id, { name: 'encrypted' });
+
+  return jsonResponse(organizationToResponse(org));
+}
+
+// GET /api/organizations/:id
+export async function handleGetOrganization(request: Request, env: Env, userId: string, orgId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const org = await getOwnedOrg(storage, orgId, userId);
+  if (!org) return errorResponse(ORG_NOT_FOUND, 404);
+  return jsonResponse(organizationToResponse(org));
+}
+
+// PUT /api/organizations/:id
+export async function handleUpdateOrganization(request: Request, env: Env, userId: string, orgId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const org = await getOwnedOrg(storage, orgId, userId);
+  if (!org) return errorResponse(ORG_NOT_FOUND, 404);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
+  const name = body && typeof (body as any).name === 'string' ? (body as any).name.trim() : '';
+  if (!name || name.length > 1000) return errorResponse('Organization name is required', 400);
+
+  const now = new Date().toISOString();
+  await storage.updateOrganizationName(orgId, name, now);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await writeOrgAudit(storage, request, userId, 'organization.update', orgId);
+
+  return jsonResponse(organizationToResponse({ ...org, name, updatedAt: now }));
+}
+
+// POST /api/organizations/:id/delete  (also wired to DELETE /api/organizations/:id)
+export async function handleDeleteOrganization(request: Request, env: Env, userId: string, orgId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const org = await getOwnedOrg(storage, orgId, userId);
+  if (!org) return errorResponse(ORG_NOT_FOUND, 404);
+
+  await storage.deleteOrganization(orgId);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await writeOrgAudit(storage, request, userId, 'organization.delete', orgId);
+
+  return new Response(null, { status: 200 });
+}
