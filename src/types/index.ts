@@ -13,6 +13,12 @@ export interface Env {
   // Optional fallback for attachment/send file storage (no credit card required).
   ATTACHMENTS_KV?: KVNamespace;
   JWT_SECRET: string;
+  // Cloudflare send_email binding (Email Sending). Optional: deployments
+  // without an onboarded sending domain simply cannot send org invites.
+  EMAIL?: { send(msg: { to: string; from: { email: string; name?: string }; subject: string; text: string; html?: string }): Promise<unknown> };
+  EMAIL_FROM?: string;
+  // Base URL used in org invite links (e.g. https://vault-test.corderocore.com)
+  ORG_INVITE_SITE_URL?: string;
   WEBAUTHN_RP_ID?: string;
   WEBAUTHN_RP_NAME?: string;
   WEBAUTHN_ALLOWED_ORIGINS?: string;
