@@ -102,6 +102,16 @@ test('countOwnedOrganizations reflects ownership across create/delete', async ()
 });
 
 import { StorageService } from '../src/services/storage';
+import {
+  createOrgUserInvite,
+  getOrgUserById,
+  getOrgUserByOrgAndEmail,
+  listOrgUsers,
+  acceptOrgUser,
+  confirmOrgUser,
+  deleteOrgUser,
+  listConfirmedMemberUserIds,
+} from '../src/services/storage-org-repo';
 
 test('StorageService exposes org repo methods', async () => {
   const db = createTestDb();
@@ -111,4 +121,99 @@ test('StorageService exposes org repo methods', async () => {
   const memberships = await storage.listMembershipsForUser('u9');
   assert.equal(memberships.length, 1);
   assert.equal(memberships[0].orgUser.role, 'owner');
+});
+
+test('invite -> accept -> confirm lifecycle transitions statuses strictly in order', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'me@x.y');
+  await seedUser(db, 'u2', 'parent@x.y');
+  await createOrganizationWithOwner(db, org('o1'), owner('ou1', 'o1', 'u1', 'me@x.y'));
+
+  await createOrgUserInvite(db, {
+    id: 'ou2', orgId: 'o1', userId: null, email: 'parent@x.y',
+    role: 'user', status: 'invited', encryptedOrgKey: null, createdAt: now, updatedAt: now,
+  });
+  assert.equal((await getOrgUserByOrgAndEmail(db, 'o1', 'parent@x.y'))?.status, 'invited');
+
+  // confirm before accept must be a no-op
+  assert.equal(await confirmOrgUser(db, 'ou2', 'o1', '4.wrapped2', now), false);
+
+  assert.equal(await acceptOrgUser(db, 'ou2', 'o1', 'u2', now), true);
+  assert.equal((await getOrgUserById(db, 'ou2'))?.status, 'accepted');
+  // double-accept is a no-op
+  assert.equal(await acceptOrgUser(db, 'ou2', 'o1', 'u2', now), false);
+
+  assert.equal(await confirmOrgUser(db, 'ou2', 'o1', '4.wrapped2', now), true);
+  const confirmed = await getOrgUserById(db, 'ou2');
+  assert.equal(confirmed?.status, 'confirmed');
+  assert.equal(confirmed?.encryptedOrgKey, '4.wrapped2');
+
+  assert.deepEqual((await listConfirmedMemberUserIds(db, 'o1')).sort(), ['u1', 'u2']);
+  assert.equal((await listOrgUsers(db, 'o1')).length, 2);
+
+  await deleteOrgUser(db, 'ou2');
+  assert.equal(await getOrgUserById(db, 'ou2'), null);
+  assert.deepEqual(await listConfirmedMemberUserIds(db, 'o1'), ['u1']);
+});
+
+test('confirmOrgUser rejects a wrong-org orgId and leaves the row untouched (cross-tenant guard)', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'me@x.y');
+  await seedUser(db, 'u2', 'parent@x.y');
+  await createOrganizationWithOwner(db, org('o1'), owner('ou1', 'o1', 'u1', 'me@x.y'));
+
+  await createOrgUserInvite(db, {
+    id: 'ou2', orgId: 'o1', userId: null, email: 'parent@x.y',
+    role: 'user', status: 'invited', encryptedOrgKey: null, createdAt: now, updatedAt: now,
+  });
+  assert.equal(await acceptOrgUser(db, 'ou2', 'o1', 'u2', now), true);
+  assert.equal((await getOrgUserById(db, 'ou2'))?.status, 'accepted');
+
+  // An owner of a different org must not be able to confirm this membership
+  // by supplying its orgUserId together with their own (wrong) orgId.
+  assert.equal(await confirmOrgUser(db, 'ou2', 'WRONG-ORG', '4.x', now), false);
+  const stillAccepted = await getOrgUserById(db, 'ou2');
+  assert.equal(stillAccepted?.status, 'accepted');
+  assert.equal(stillAccepted?.encryptedOrgKey, null);
+
+  // The correct org can still confirm it afterward.
+  assert.equal(await confirmOrgUser(db, 'ou2', 'o1', '4.wrapped2', now), true);
+  assert.equal((await getOrgUserById(db, 'ou2'))?.status, 'confirmed');
+});
+
+test('acceptOrgUser rejects a wrong-org orgId and leaves the row untouched (cross-tenant guard)', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'me@x.y');
+  await seedUser(db, 'u2', 'parent@x.y');
+  await createOrganizationWithOwner(db, org('o1'), owner('ou1', 'o1', 'u1', 'me@x.y'));
+
+  await createOrgUserInvite(db, {
+    id: 'ou2', orgId: 'o1', userId: null, email: 'parent@x.y',
+    role: 'user', status: 'invited', encryptedOrgKey: null, createdAt: now, updatedAt: now,
+  });
+
+  // A token minted against a different org must not be able to accept this
+  // membership by supplying its orgUserId together with the wrong orgId.
+  assert.equal(await acceptOrgUser(db, 'ou2', 'WRONG-ORG', 'u2', now), false);
+  const stillInvited = await getOrgUserById(db, 'ou2');
+  assert.equal(stillInvited?.status, 'invited');
+  assert.equal(stillInvited?.userId, null);
+
+  // The correct org can still accept it afterward.
+  assert.equal(await acceptOrgUser(db, 'ou2', 'o1', 'u2', now), true);
+  assert.equal((await getOrgUserById(db, 'ou2'))?.status, 'accepted');
+});
+
+test('updateRevisionDates bumps every listed user to one shared timestamp', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'a1@x.y');
+  await seedUser(db, 'u2', 'a2@x.y');
+  const storage = new StorageService(db as any);
+  const stamp = await storage.updateRevisionDates(['u1', 'u2']);
+  const r1 = await db.prepare('SELECT revision_date FROM user_revisions WHERE user_id = ?').bind('u1').first<any>();
+  const r2 = await db.prepare('SELECT revision_date FROM user_revisions WHERE user_id = ?').bind('u2').first<any>();
+  assert.equal(r1.revision_date, stamp);
+  assert.equal(r2.revision_date, stamp);
+  // empty list: returns a timestamp, no throw
+  assert.ok(await storage.updateRevisionDates([]));
 });

@@ -53,6 +53,14 @@ import {
   updateOrganizationName as updateStoredOrganizationName,
   deleteOrganization as deleteStoredOrganization,
   countOwnedOrganizations as countStoredOwnedOrganizations,
+  createOrgUserInvite as createStoredOrgUserInvite,
+  getOrgUserById as getStoredOrgUserById,
+  getOrgUserByOrgAndEmail as getStoredOrgUserByOrgAndEmail,
+  listOrgUsers as listStoredOrgUsers,
+  acceptOrgUser as acceptStoredOrgUser,
+  confirmOrgUser as confirmStoredOrgUser,
+  deleteOrgUser as deleteStoredOrgUser,
+  listConfirmedMemberUserIds as listStoredConfirmedMemberUserIds,
 } from './storage-org-repo';
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
@@ -149,6 +157,7 @@ import {
 import {
   getRevisionDate as getStoredRevisionDate,
   updateRevisionDate as updateStoredRevisionDate,
+  updateRevisionDates as updateStoredRevisionDates,
 } from './storage-revision-repo';
 import {
   getUserDomainSettings as getStoredUserDomainSettings,
@@ -610,6 +619,42 @@ export class StorageService {
 
   async countOwnedOrganizations(userId: string): Promise<number> {
     return countStoredOwnedOrganizations(this.db, userId);
+  }
+
+  async createOrgUserInvite(orgUser: OrganizationUser): Promise<void> {
+    return createStoredOrgUserInvite(this.db, orgUser);
+  }
+
+  async getOrgUserById(orgUserId: string): Promise<OrganizationUser | null> {
+    return getStoredOrgUserById(this.db, orgUserId);
+  }
+
+  async getOrgUserByOrgAndEmail(orgId: string, email: string): Promise<OrganizationUser | null> {
+    return getStoredOrgUserByOrgAndEmail(this.db, orgId, email);
+  }
+
+  async listOrgUsers(orgId: string): Promise<OrganizationUser[]> {
+    return listStoredOrgUsers(this.db, orgId);
+  }
+
+  async acceptOrgUser(orgUserId: string, orgId: string, userId: string, updatedAt: string): Promise<boolean> {
+    return acceptStoredOrgUser(this.db, orgUserId, orgId, userId, updatedAt);
+  }
+
+  async confirmOrgUser(orgUserId: string, orgId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
+    return confirmStoredOrgUser(this.db, orgUserId, orgId, encryptedOrgKey, updatedAt);
+  }
+
+  async deleteOrgUser(orgUserId: string): Promise<void> {
+    return deleteStoredOrgUser(this.db, orgUserId);
+  }
+
+  async listConfirmedMemberUserIds(orgId: string): Promise<string[]> {
+    return listStoredConfirmedMemberUserIds(this.db, orgId);
+  }
+
+  async updateRevisionDates(userIds: string[]): Promise<string> {
+    return updateStoredRevisionDates(this.db, userIds);
   }
 
   // --- Attachments ---

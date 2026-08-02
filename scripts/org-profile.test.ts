@@ -31,3 +31,33 @@ test('buildProfileResponse threads organizations into both fields', () => {
   assert.equal(p.organizations[0].id, 'o1');
   assert.equal(p.organizationsNew, p.organizations);
 });
+
+import { createTestDb } from './test-db';
+import { StorageService } from '../src/services/storage';
+import { loadProfileOrgs } from '../src/utils/profile-orgs';
+
+test('loadProfileOrgs excludes invited memberships and shapes the rest', async () => {
+  const db = createTestDb();
+  const now2 = '2026-08-02T00:00:00.000Z';
+  await db
+    .prepare('INSERT INTO users(id, email, master_password_hash, key, kdf_type, kdf_iterations, security_stamp, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind('u1', 'a@b.c', 'h', 'k', 0, 600000, 's', now2, now2)
+    .run();
+  const storage = new StorageService(db as any);
+  await storage.createOrganizationWithOwner(
+    { id: 'o1', name: 'Fam', publicKey: 'pub', encryptedPrivateKey: '2.p', createdAt: now2, updatedAt: now2 },
+    { id: 'ou1', orgId: 'o1', userId: 'u1', email: 'a@b.c', role: 'owner', status: 'confirmed', encryptedOrgKey: '4.w', createdAt: now2, updatedAt: now2 }
+  );
+  await db
+    .prepare('INSERT INTO organizations(id, name, public_key, encrypted_private_key, created_at, updated_at) VALUES(?,?,?,?,?,?)')
+    .bind('o2', 'Other', 'pub', '2.p', now2, now2)
+    .run();
+  await db
+    .prepare('INSERT INTO organization_users(id, org_id, user_id, email, role, status, encrypted_org_key, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind('ou2', 'o2', 'u1', 'a@b.c', 'user', 'invited', null, now2, now2)
+    .run();
+
+  const orgs = await loadProfileOrgs(storage, 'u1');
+  assert.equal(orgs.length, 1);
+  assert.equal((orgs[0] as any).id, 'o1');
+});

@@ -6,6 +6,7 @@ import { readActingDeviceIdentifier } from '../utils/device';
 import { notifyUserVaultSync } from '../durable/notifications-hub';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { parseCreateOrgRequest, organizationToResponse } from './org-shapes';
+import { bumpAndNotifyMembers } from './org-users';
 
 const ORG_NOT_FOUND = 'Organization not found';
 
@@ -30,7 +31,7 @@ async function writeOrgAudit(
 
 // Loads the org ONLY if the requester is a confirmed owner; unauthorized and
 // nonexistent are indistinguishable to the caller (Global Constraint).
-async function getOwnedOrg(
+export async function getOwnedOrg(
   storage: StorageService,
   orgId: string,
   userId: string
@@ -115,8 +116,7 @@ export async function handleUpdateOrganization(request: Request, env: Env, userI
   const now = new Date().toISOString();
   await storage.updateOrganizationName(orgId, name, now);
 
-  const revisionDate = await storage.updateRevisionDate(userId);
-  notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await bumpAndNotifyMembers(env, storage, orgId, readActingDeviceIdentifier(request));
   await writeOrgAudit(storage, request, userId, 'organization.update', orgId);
 
   return jsonResponse(organizationToResponse({ ...org, name, updatedAt: now }));
@@ -128,10 +128,17 @@ export async function handleDeleteOrganization(request: Request, env: Env, userI
   const org = await getOwnedOrg(storage, orgId, userId);
   if (!org) return errorResponse(ORG_NOT_FOUND, 404);
 
+  // Capture member ids BEFORE deleteOrganization cascades the membership rows
+  // away — bumpAndNotifyMembers can't be used post-delete since it re-queries
+  // membership internally.
+  const memberIds = await storage.listConfirmedMemberUserIds(orgId);
   await storage.deleteOrganization(orgId);
 
-  const revisionDate = await storage.updateRevisionDate(userId);
-  notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  const contextId = readActingDeviceIdentifier(request);
+  const revisionDate = await storage.updateRevisionDates(memberIds);
+  for (const memberId of memberIds) {
+    notifyUserVaultSync(env, memberId, revisionDate, contextId);
+  }
   await writeOrgAudit(storage, request, userId, 'organization.delete', orgId);
 
   return new Response(null, { status: 200 });

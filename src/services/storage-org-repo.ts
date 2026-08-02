@@ -132,3 +132,78 @@ export async function countOwnedOrganizations(db: D1Database, userId: string): P
     .first<{ count: number }>();
   return row?.count ?? 0;
 }
+
+export async function createOrgUserInvite(db: D1Database, orgUser: OrganizationUser): Promise<void> {
+  await db
+    .prepare(`INSERT INTO organization_users(${ORG_USER_COLUMNS}) VALUES(?,?,?,?,?,?,?,?,?)`)
+    .bind(
+      orgUser.id,
+      orgUser.orgId,
+      orgUser.userId,
+      orgUser.email,
+      orgUser.role,
+      orgUser.status,
+      orgUser.encryptedOrgKey,
+      orgUser.createdAt,
+      orgUser.updatedAt
+    )
+    .run();
+}
+
+export async function getOrgUserById(db: D1Database, orgUserId: string): Promise<OrganizationUser | null> {
+  const row = await db
+    .prepare(`SELECT ${ORG_USER_COLUMNS} FROM organization_users WHERE id = ?`)
+    .bind(orgUserId)
+    .first<any>();
+  if (!row) return null;
+  return mapOrgUserRow(row);
+}
+
+export async function getOrgUserByOrgAndEmail(db: D1Database, orgId: string, email: string): Promise<OrganizationUser | null> {
+  const row = await db
+    .prepare(`SELECT ${ORG_USER_COLUMNS} FROM organization_users WHERE org_id = ? AND email = ?`)
+    .bind(orgId, email)
+    .first<any>();
+  if (!row) return null;
+  return mapOrgUserRow(row);
+}
+
+export async function listOrgUsers(db: D1Database, orgId: string): Promise<OrganizationUser[]> {
+  const res = await db
+    .prepare(`SELECT ${ORG_USER_COLUMNS} FROM organization_users WHERE org_id = ? ORDER BY created_at ASC`)
+    .bind(orgId)
+    .all<any>();
+  return (res.results || []).map(mapOrgUserRow);
+}
+
+// org_id is part of the WHERE clause (not just an id lookup) as defense-in-depth
+// against cross-tenant mutation: even if a caller supplies an orgUserId that
+// belongs to a different org than the one it's authorized against, the UPDATE
+// simply matches zero rows instead of mutating someone else's membership.
+export async function acceptOrgUser(db: D1Database, orgUserId: string, orgId: string, userId: string, updatedAt: string): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE organization_users SET user_id = ?, status = 'accepted', updated_at = ? WHERE id = ? AND org_id = ? AND status = 'invited'")
+    .bind(userId, updatedAt, orgUserId, orgId)
+    .run();
+  return ((res as any).meta?.changes ?? 0) > 0;
+}
+
+export async function confirmOrgUser(db: D1Database, orgUserId: string, orgId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE organization_users SET encrypted_org_key = ?, status = 'confirmed', updated_at = ? WHERE id = ? AND org_id = ? AND status = 'accepted'")
+    .bind(encryptedOrgKey, updatedAt, orgUserId, orgId)
+    .run();
+  return ((res as any).meta?.changes ?? 0) > 0;
+}
+
+export async function deleteOrgUser(db: D1Database, orgUserId: string): Promise<void> {
+  await db.prepare('DELETE FROM organization_users WHERE id = ?').bind(orgUserId).run();
+}
+
+export async function listConfirmedMemberUserIds(db: D1Database, orgId: string): Promise<string[]> {
+  const res = await db
+    .prepare(`SELECT user_id FROM organization_users WHERE org_id = ? AND status = 'confirmed' AND user_id IS NOT NULL`)
+    .bind(orgId)
+    .all<any>();
+  return (res.results || []).map((row) => row.user_id);
+}
