@@ -5,6 +5,11 @@ account_id = "abce177b14c156c4e1295484d4548954"
 compatibility_date = "2024-01-01"
 compatibility_flags = [ "rpc" ]
 
+# Top-level (NOT under [triggers] — nesting it there silently drops the custom domain).
+routes = [
+  { pattern = "vault-test.corderocore.com", custom_domain = true }
+]
+
 [build]
 command = "npm run build"
 
@@ -18,14 +23,10 @@ run_worker_first = true
 [triggers]
 crons = [ "*/5 * * * *" ]
 
-routes = [
-  { pattern = "vault-test.corderocore.com", custom_domain = true }
-]
-
 [[d1_databases]]
 binding = "DB"
 database_name = "cdcore-vault-test"
-database_id = "FILLED-IN-TASK-8"
+database_id = "46f9ce35-8714-40ed-a264-7fefb76e71e8"
 
 [[durable_objects.bindings]]
 name = "NOTIFICATIONS_HUB"
