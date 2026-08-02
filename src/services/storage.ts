@@ -1,4 +1,4 @@
-import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord, Organization, OrganizationUser, OrgMembership } from '../types';
+import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord, Organization, OrganizationUser, OrgMembership, Collection, CollectionGrant, CollectionWithGrant } from '../types';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -62,6 +62,20 @@ import {
   deleteOrgUser as deleteStoredOrgUser,
   listConfirmedMemberUserIds as listStoredConfirmedMemberUserIds,
 } from './storage-org-repo';
+import {
+  createCollection as createStoredCollection,
+  getCollection as getStoredCollection,
+  listCollections as listStoredCollections,
+  updateCollectionName as updateStoredCollectionName,
+  deleteCollection as deleteStoredCollection,
+  setGrant as setStoredGrant,
+  deleteGrant as deleteStoredGrant,
+  listGrantsForCollection as listStoredGrantsForCollection,
+  listCollectionsForMember as listStoredCollectionsForMember,
+  addCipherToCollections as addStoredCipherToCollections,
+  getCipherCollectionIds as getStoredCipherCollectionIds,
+  isCipherInGrantedCollection as isStoredCipherInGrantedCollection,
+} from './storage-collection-repo';
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
   bulkDeleteCiphers as deleteStoredCiphers,
@@ -651,6 +665,59 @@ export class StorageService {
 
   async listConfirmedMemberUserIds(orgId: string): Promise<string[]> {
     return listStoredConfirmedMemberUserIds(this.db, orgId);
+  }
+
+  // --- Collections ---
+
+  async createCollection(collection: Collection): Promise<void> {
+    return createStoredCollection(this.db, collection);
+  }
+
+  async getCollection(collectionId: string): Promise<Collection | null> {
+    return getStoredCollection(this.db, collectionId);
+  }
+
+  async listCollections(orgId: string): Promise<Collection[]> {
+    return listStoredCollections(this.db, orgId);
+  }
+
+  async updateCollectionName(collectionId: string, name: string, updatedAt: string): Promise<void> {
+    return updateStoredCollectionName(this.db, collectionId, name, updatedAt);
+  }
+
+  async deleteCollection(collectionId: string): Promise<void> {
+    return deleteStoredCollection(this.db, collectionId);
+  }
+
+  async setGrant(grant: CollectionGrant): Promise<void> {
+    return setStoredGrant(this.db, grant);
+  }
+
+  async deleteGrant(collectionId: string, orgUserId: string): Promise<void> {
+    return deleteStoredGrant(this.db, collectionId, orgUserId);
+  }
+
+  async listGrantsForCollection(collectionId: string): Promise<CollectionGrant[]> {
+    return listStoredGrantsForCollection(this.db, collectionId);
+  }
+
+  async listCollectionsForMember(orgUserId: string): Promise<CollectionWithGrant[]> {
+    return listStoredCollectionsForMember(this.db, orgUserId);
+  }
+
+  async addCipherToCollections(cipherId: string, collectionIds: string[]): Promise<void> {
+    return addStoredCipherToCollections(this.db, cipherId, collectionIds);
+  }
+
+  async getCipherCollectionIds(cipherId: string): Promise<string[]> {
+    return getStoredCipherCollectionIds(this.db, cipherId);
+  }
+
+  async isCipherInGrantedCollection(
+    cipherId: string,
+    orgUserId: string
+  ): Promise<{ granted: boolean; readOnly: boolean; hidePasswords: boolean }> {
+    return isStoredCipherInGrantedCollection(this.db, cipherId, orgUserId);
   }
 
   async updateRevisionDates(userIds: string[]): Promise<string> {

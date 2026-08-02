@@ -221,3 +221,17 @@ test('deleteCollection cascades to grants and cipher_collections', async () => {
   assert.deepEqual(await listGrantsForCollection(db, 'c1'), []);
   assert.deepEqual(await getCipherCollectionIds(db, 'ci1'), []);
 });
+
+test('StorageService.createCollection and listCollections round-trip', async () => {
+  const { StorageService } = await import('../src/services/storage');
+  const db = createTestDb();
+  await seedOrg(db, 'o1');
+
+  const storage = new StorageService(db);
+  await storage.createCollection(collection('c1', 'o1'));
+  await storage.createCollection(collection('c2', 'o1'));
+
+  const list = await storage.listCollections('o1');
+  assert.equal(list.length, 2);
+  assert.deepEqual(list.map((c) => c.id), ['c1', 'c2']);
+});
