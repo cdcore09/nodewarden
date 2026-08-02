@@ -11,7 +11,7 @@ import { findMatchingTotpCounter, isTotpEnabled } from '../utils/totp';
 import { createRecoveryCode, recoveryCodeEquals } from '../utils/recovery-code';
 import { buildAccountKeys } from '../utils/user-decryption';
 import { buildProfileResponse } from '../utils/profile-response';
-import { profileOrganizationResponse } from './org-shapes';
+import { loadProfileOrgs } from '../utils/profile-orgs';
 import { isYubiKeyEnabled, isYubiKeyPublicId, requestYubicoApiCredentials, verifyYubicoOtp, yubiKeyPublicIdFromOtp } from '../utils/yubico-otp';
 import {
   getYubicoCredentials,
@@ -495,10 +495,7 @@ export async function handleGetProfile(request: Request, env: Env, userId: strin
   const storage = new StorageService(env.DB);
   const user = await storage.getUserById(userId);
   if (!user) return errorResponse('User not found', 404);
-  const memberships = await storage.listMembershipsForUser(userId);
-  const profileOrgs = memberships
-    .filter((m) => m.orgUser.status !== 'invited')
-    .map(profileOrganizationResponse);
+  const profileOrgs = await loadProfileOrgs(storage, userId);
   return jsonResponse(buildProfileResponse(user, env, profileOrgs));
 }
 
@@ -538,10 +535,7 @@ export async function handleUpdateProfile(request: Request, env: Env, userId: st
     },
   });
 
-  const memberships = await storage.listMembershipsForUser(userId);
-  const profileOrgs = memberships
-    .filter((m) => m.orgUser.status !== 'invited')
-    .map(profileOrganizationResponse);
+  const profileOrgs = await loadProfileOrgs(storage, userId);
   return jsonResponse(buildProfileResponse(user, env, profileOrgs));
 }
 
