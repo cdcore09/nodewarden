@@ -17,7 +17,7 @@
 - **DB stores role/status as TEXT** (`'owner'|'user'`, `'invited'|'accepted'|'confirmed'`); **API emits Bitwarden numerics** (type: owner=0, user=2; status: invited=0, accepted=1, confirmed=2). Mapping lives ONLY in `src/handlers/org-shapes.ts`.
 - **Cipher ownership invariant:** a cipher is org-owned iff `organization_id IS NOT NULL`; `user_id` remains NOT NULL and records the creator. (Personal-vault query filtering on `organization_id IS NULL` happens in Phase 3, when org ciphers first become creatable.)
 - **Unauthorized == nonexistent:** org endpoints return the same 404 (`errorResponse('Organization not found', 404)`) for both.
-- Commit after every task; branch `feat/organizations` (create via superpowers:using-git-worktrees at execution start). Commit messages end with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+- Commit after every task; branch `feat/organizations` (create via superpowers:using-git-worktrees at execution start). NO Co-Authored-By trailers on any commit (user rule). Follow the user's `/commit` skill conventions: match the repo's existing message style (`git log --oneline -5`), conventional prefixes as shown in each task's commit step.
 - Never touch `.env` / never commit secrets. `.dev.vars` must be confirmed gitignored before writing it (Task 9).
 
 ---
