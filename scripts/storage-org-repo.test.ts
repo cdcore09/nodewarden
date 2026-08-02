@@ -86,3 +86,15 @@ test('duplicate member email in same org is rejected by unique index', async () 
   );
   assert.equal(await getOrganization(db, 'o1b'), null);
 });
+
+import { StorageService } from '../src/services/storage';
+
+test('StorageService exposes org repo methods', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u9', 'svc@x.y');
+  const storage = new StorageService(db as any);
+  await storage.createOrganizationWithOwner(org('o9'), owner('ou9', 'o9', 'u9', 'svc@x.y'));
+  const memberships = await storage.listMembershipsForUser('u9');
+  assert.equal(memberships.length, 1);
+  assert.equal(memberships[0].orgUser.role, 'owner');
+});

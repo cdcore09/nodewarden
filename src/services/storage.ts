@@ -1,4 +1,4 @@
-import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
+import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord, Organization, OrganizationUser, OrgMembership } from '../types';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -45,6 +45,14 @@ import {
   getFoldersPage as listStoredFoldersPage,
   saveFolder as saveStoredFolder,
 } from './storage-folder-repo';
+import {
+  createOrganizationWithOwner as createStoredOrganizationWithOwner,
+  getOrganization as getStoredOrganization,
+  getOrgUserByOrgAndUser as getStoredOrgUserByOrgAndUser,
+  listMembershipsForUser as listStoredMembershipsForUser,
+  updateOrganizationName as updateStoredOrganizationName,
+  deleteOrganization as deleteStoredOrganization,
+} from './storage-org-repo';
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
   bulkDeleteCiphers as deleteStoredCiphers,
@@ -571,6 +579,32 @@ export class StorageService {
 
   async getFoldersPage(userId: string, limit: number, offset: number): Promise<Folder[]> {
     return listStoredFoldersPage(this.db, userId, limit, offset);
+  }
+
+  // --- Organizations ---
+
+  async createOrganizationWithOwner(org: Organization, owner: OrganizationUser): Promise<void> {
+    return createStoredOrganizationWithOwner(this.db, org, owner);
+  }
+
+  async getOrganization(orgId: string): Promise<Organization | null> {
+    return getStoredOrganization(this.db, orgId);
+  }
+
+  async getOrgUserByOrgAndUser(orgId: string, userId: string): Promise<OrganizationUser | null> {
+    return getStoredOrgUserByOrgAndUser(this.db, orgId, userId);
+  }
+
+  async listMembershipsForUser(userId: string): Promise<OrgMembership[]> {
+    return listStoredMembershipsForUser(this.db, userId);
+  }
+
+  async updateOrganizationName(orgId: string, name: string, updatedAt: string): Promise<void> {
+    return updateStoredOrganizationName(this.db, orgId, name, updatedAt);
+  }
+
+  async deleteOrganization(orgId: string): Promise<void> {
+    return deleteStoredOrganization(this.db, orgId);
   }
 
   // --- Attachments ---
