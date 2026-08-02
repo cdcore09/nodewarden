@@ -25,13 +25,25 @@ class ShimStatement {
 export function createTestDb(): any {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
+  // Apply config table, matching ensureStorageSchema() line 204
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  } catch {
+    /* ignore idempotent errors */
+  }
   for (const stmt of SCHEMA_STATEMENTS) {
     // Mirrors ensureStorageSchema(): idempotent statements; ALTERs for
     // already-present columns throw and are intentionally ignored.
+    // Match executeSchemaStatement() error filtering: only suppress
+    // 'already exists' and 'duplicate column name'.
     try {
       db.exec(stmt);
-    } catch {
-      /* ignore, same as runtime bootstrap */
+    } catch (error) {
+      const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (!msg.includes('already exists') && !msg.includes('duplicate column name')) {
+        throw error;
+      }
+      /* ignore idempotent errors, same as runtime bootstrap */
     }
   }
   return {
@@ -42,6 +54,7 @@ export function createTestDb(): any {
       const results = [];
       for (const s of statements) results.push(await s.run());
       return results;
+      // Note: batch is not atomic like real D1, runs each statement sequentially
     },
     async exec(sql: string) {
       db.exec(sql);

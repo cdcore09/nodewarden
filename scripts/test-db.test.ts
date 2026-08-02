@@ -15,4 +15,7 @@ test('createTestDb applies the schema and supports basic D1 operations', async (
   assert.equal(row.email, 'a@b.c');
   const all = await db.prepare('SELECT id FROM users').all<any>();
   assert.equal((all.results || []).length, 1);
+  // Verify config table exists
+  const configTableExists = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='config'").first<any>();
+  assert.ok(configTableExists, 'config table should exist');
 });
