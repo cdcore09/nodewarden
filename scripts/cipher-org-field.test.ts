@@ -51,13 +51,17 @@ test('saveCipher + getCipher round-trips a non-null organizationId', async () =>
 
   assert.equal(fetched?.organizationId, 'org-1');
 
-  // The Cipher object round-trips organizationId today via the opaque JSON
-  // `data` blob passthrough (index signature), which masks whether the
-  // physical `organization_id` column is actually persisted. Direct SQL
-  // access (backups, future org-scoped queries, indexes) depends on the
-  // real column being written, so assert on it directly.
-  const raw = await db.prepare('SELECT organization_id FROM ciphers WHERE id = ?').bind('c1').first<any>();
+  // The physical `organization_id` column is the single source of truth for
+  // reads (backups, future org-scoped queries, indexes all depend on it
+  // being populated) — assert on it directly, not just the parsed object.
+  const raw = await db.prepare('SELECT organization_id, data FROM ciphers WHERE id = ?').bind('c1').first<any>();
   assert.equal(raw?.organization_id, 'org-1');
+
+  // Guard against blob/column drift: organizationId must be stripped from
+  // the opaque JSON `data` blob now that it has a first-class column, so the
+  // column stays authoritative and the two never disagree.
+  const parsedData = JSON.parse(raw?.data ?? '{}');
+  assert.equal('organizationId' in parsedData, false, 'organizationId must not be duplicated in the data blob');
 });
 
 test('saveCipher + getCipher round-trips a personal cipher as null, not undefined', async () => {

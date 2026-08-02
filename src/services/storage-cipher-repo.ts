@@ -32,6 +32,8 @@ const CIPHER_SCALAR_DATA_KEYS = new Set([
   'id',
   'userId',
   'user_id',
+  'organizationId',
+  'organization_id',
   'type',
   'folderId',
   'folder_id',
