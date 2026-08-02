@@ -32,9 +32,14 @@ export function buildOrgInviteEmail(p: OrgInviteEmailParams): OrgEmailMessage {
   if (p.inviteCode) query.set('inviteCode', p.inviteCode);
   const link = `${p.siteUrl.replace(/\/$/, '')}/#/accept-organization?${query.toString()}`;
 
-  const subject = `You have been invited to the "${p.orgName}" organization`;
+  // Org names are client-supplied (org create/rename) and land verbatim in
+  // the email subject and body — strip control chars/CR/LF before they can
+  // be used for header or content injection.
+  const orgName = sanitizeHeader(p.orgName);
+
+  const subject = `You have been invited to the "${orgName}" organization`;
   const text = [
-    `You have been invited to join the "${p.orgName}" organization on a NodeWarden password server.`,
+    `You have been invited to join the "${orgName}" organization on a NodeWarden password server.`,
     '',
     'To accept, open this link, create your account if you do not have one yet, and follow the steps:',
     link,
@@ -43,12 +48,16 @@ export function buildOrgInviteEmail(p: OrgInviteEmailParams): OrgEmailMessage {
     'This invitation link expires in 7 days.',
   ].join('\n');
   const html = [
-    `<p>You have been invited to join the <strong>${escapeHtml(p.orgName)}</strong> organization on a NodeWarden password server.</p>`,
+    `<p>You have been invited to join the <strong>${escapeHtml(orgName)}</strong> organization on a NodeWarden password server.</p>`,
     `<p><a href="${link}">Accept the invitation</a> (create your account first if you do not have one yet).</p>`,
     '<p>If you were not expecting this invitation, you can ignore this email. This link expires in 7 days.</p>',
   ].join('\n');
 
   return { to: p.toEmail, subject, text, html };
+}
+
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n\x00-\x1f\x7f]/g, '');
 }
 
 function escapeHtml(value: string): string {

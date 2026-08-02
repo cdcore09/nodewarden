@@ -63,6 +63,11 @@ test('parseInviteRequest normalizes, dedupes, and validates', () => {
   assert.ok('error' in (parseInviteRequest({ emails: Array.from({ length: 21 }, (_, i) => `a${i}@b.c`) }) as any));
 });
 
+test('parseInviteRequest rejects control chars / CRLF header-injection attempts', () => {
+  assert.ok('error' in (parseInviteRequest({ emails: ['a@b.c\r\nbcc:x@y.z'] }) as any));
+  assert.ok('error' in (parseInviteRequest({ emails: ['a b@c.d'] }) as any));
+});
+
 test('orgUserDetailsResponse maps enums and tolerates a missing user row', () => {
   const detail = orgUserDetailsResponse(membership.orgUser, { name: 'Me', email: 'a@b.c' }) as any;
   assert.equal(detail.object, 'organizationUserUserDetails');

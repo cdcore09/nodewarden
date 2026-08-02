@@ -7,7 +7,7 @@ import { jsonResponse, errorResponse } from '../utils/response';
 import { generateUUID } from '../utils/uuid';
 import { readActingDeviceIdentifier } from '../utils/device';
 import { notifyUserVaultSync } from '../durable/notifications-hub';
-import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
+import { auditRequestMetadata, writeAuditEvent, safeWriteAuditEvent } from '../services/audit-events';
 import { getOwnedOrg } from './organizations';
 import { parseInviteRequest, orgUserDetailsResponse, orgUserListResponse, userPublicKeyResponse } from './org-shapes';
 import { createOrgInviteToken, verifyOrgInviteToken } from '../services/org-invite-token';
@@ -27,6 +27,31 @@ async function writeMemberAudit(
   metadata: Record<string, unknown> = {}
 ): Promise<void> {
   await writeAuditEvent(storage, {
+    actorUserId: userId,
+    action,
+    category: 'data',
+    level,
+    targetType: 'organization',
+    targetId: orgId,
+    metadata: { ...metadata, ...auditRequestMetadata(request) },
+  });
+}
+
+// Same shape as writeMemberAudit but built on safeWriteAuditEvent (env-driven,
+// constructs its own StorageService) so a throw here can never abort a
+// surrounding loop or skip the response it gates — used where a partial
+// failure must not cost us the rest of the batch (the invite loop) or the
+// audit record for a failed send (resend).
+async function writeMemberAuditSafe(
+  env: Env,
+  request: Request,
+  userId: string,
+  action: string,
+  orgId: string,
+  level: 'info' | 'warn' | 'error' | 'security' = 'info',
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
+  await safeWriteAuditEvent(env, {
     actorUserId: userId,
     action,
     category: 'data',
@@ -150,7 +175,7 @@ export async function handleInviteOrgUsers(request: Request, env: Env, userId: s
       anyDeliveryFailed = true;
     }
 
-    await writeMemberAudit(storage, request, userId, 'organization.user.invite', orgId, 'info', {
+    await writeMemberAuditSafe(env, request, userId, 'organization.user.invite', orgId, 'info', {
       targetEmail: email,
       ...(delivered ? {} : { emailDelivered: false }),
     });
@@ -182,34 +207,43 @@ export async function handleResendOrgInvite(
   if (!isOrgEmailConfigured(env)) return errorResponse('Email is not configured on this server', 500);
   if (!env.ORG_INVITE_SITE_URL) return errorResponse('Email is not configured on this server', 500);
 
-  const now = new Date().toISOString();
-  const existingUser = await storage.getUser(orgUser.email);
-  let code: string | null = null;
-  if (!existingUser) {
-    code = generateUUID();
-    await storage.createInvite({
-      code,
-      createdBy: userId,
-      usedBy: null,
-      expiresAt: new Date(Date.now() + INVITE_CODE_TTL_MS).toISOString(),
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
+  // Registration codes are minted by the original invite (see
+  // handleInviteOrgUsers) as standalone Invite rows with no orgUserId/email
+  // column linking them back here — so a resend has no way to look up or
+  // revoke whatever code an earlier invite/resend already issued. Minting a
+  // fresh one on every resend would leave an unbounded number of active
+  // 7-day registration codes for the same pending invitee with no way to
+  // clean them up. Since we can never prove none exist, resend never mints
+  // a new one: an account-less invitee reuses the code from their most
+  // recent email. If that email/code is genuinely lost, the recovery path
+  // is to remove and re-invite the member, which starts a fresh org_user
+  // row (and a single fresh code) via handleInviteOrgUsers.
+  const code: string | null = null;
 
   const token = await createOrgInviteToken(env.JWT_SECRET, { orgUserId, orgId, email: orgUser.email });
-  await sendOrgInviteEmail(env, {
-    toEmail: orgUser.email,
-    orgName: org.name,
-    orgId,
-    orgUserId,
-    token,
-    inviteCode: code,
-    siteUrl: env.ORG_INVITE_SITE_URL!,
+  let delivered = true;
+  try {
+    await sendOrgInviteEmail(env, {
+      toEmail: orgUser.email,
+      orgName: org.name,
+      orgId,
+      orgUserId,
+      token,
+      inviteCode: code,
+      siteUrl: env.ORG_INVITE_SITE_URL!,
+    });
+  } catch {
+    delivered = false;
+  }
+
+  await writeMemberAuditSafe(env, request, userId, 'organization.user.reinvite', orgId, 'info', {
+    targetEmail: orgUser.email,
+    ...(delivered ? {} : { emailDelivered: false }),
   });
 
-  await writeMemberAudit(storage, request, userId, 'organization.user.reinvite', orgId, 'info', { targetEmail: orgUser.email });
+  if (!delivered) {
+    return errorResponse('Invitation email could not be sent; try again', 500);
+  }
 
   return new Response(null, { status: 200 });
 }

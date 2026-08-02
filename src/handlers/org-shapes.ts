@@ -115,6 +115,10 @@ export function parseInviteRequest(body: unknown): { emails: string[] } | { erro
   if (emails.length > 20) return { error: 'Too many invitations in one request (max 20)' };
   for (const e of emails) {
     if (!e.includes('@') || e.length < 3) return { error: `Invalid email address: ${e}` };
+    // Reject interior whitespace and control chars (incl. CR/LF) — these are
+    // the building blocks of header-injection payloads once the address
+    // flows into env.EMAIL.send({ to: ... }).
+    if (/[\s\x00-\x1f\x7f]/.test(e)) return { error: `Invalid email address: ${e}` };
   }
   return { emails };
 }

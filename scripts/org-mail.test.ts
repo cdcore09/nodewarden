@@ -26,6 +26,15 @@ test('buildOrgInviteEmail omits inviteCode param when not provided', () => {
   assert.ok(!msg.text.includes('inviteCode='));
 });
 
+test('buildOrgInviteEmail strips control chars/CRLF from the org name before it reaches headers or body', () => {
+  const msg = buildOrgInviteEmail({ ...params, orgName: 'Evil\r\nBcc: attacker@example.com' });
+  assert.ok(!/[\r\n]/.test(msg.subject), `subject should have no CR/LF: ${JSON.stringify(msg.subject)}`);
+  assert.ok(msg.subject.includes('EvilBcc: attacker@example.com'));
+  assert.ok(!msg.text.includes('\r'), 'text should contain no bare CR');
+  assert.ok(msg.html && msg.html.includes('EvilBcc: attacker@example.com'));
+  assert.ok(msg.html && !msg.html.includes('\r'), 'html should contain no bare CR');
+});
+
 test('sendOrgInviteEmail throws when email is not configured', async () => {
   await assert.rejects(
     () => sendOrgInviteEmail({ EMAIL_FROM: 'x@y.z' } as any, params),
