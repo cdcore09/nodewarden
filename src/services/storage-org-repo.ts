@@ -176,18 +176,22 @@ export async function listOrgUsers(db: D1Database, orgId: string): Promise<Organ
   return (res.results || []).map(mapOrgUserRow);
 }
 
-export async function acceptOrgUser(db: D1Database, orgUserId: string, userId: string, updatedAt: string): Promise<boolean> {
+// org_id is part of the WHERE clause (not just an id lookup) as defense-in-depth
+// against cross-tenant mutation: even if a caller supplies an orgUserId that
+// belongs to a different org than the one it's authorized against, the UPDATE
+// simply matches zero rows instead of mutating someone else's membership.
+export async function acceptOrgUser(db: D1Database, orgUserId: string, orgId: string, userId: string, updatedAt: string): Promise<boolean> {
   const res = await db
-    .prepare("UPDATE organization_users SET user_id = ?, status = 'accepted', updated_at = ? WHERE id = ? AND status = 'invited'")
-    .bind(userId, updatedAt, orgUserId)
+    .prepare("UPDATE organization_users SET user_id = ?, status = 'accepted', updated_at = ? WHERE id = ? AND org_id = ? AND status = 'invited'")
+    .bind(userId, updatedAt, orgUserId, orgId)
     .run();
   return ((res as any).meta?.changes ?? 0) > 0;
 }
 
-export async function confirmOrgUser(db: D1Database, orgUserId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
+export async function confirmOrgUser(db: D1Database, orgUserId: string, orgId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
   const res = await db
-    .prepare("UPDATE organization_users SET encrypted_org_key = ?, status = 'confirmed', updated_at = ? WHERE id = ? AND status = 'accepted'")
-    .bind(encryptedOrgKey, updatedAt, orgUserId)
+    .prepare("UPDATE organization_users SET encrypted_org_key = ?, status = 'confirmed', updated_at = ? WHERE id = ? AND org_id = ? AND status = 'accepted'")
+    .bind(encryptedOrgKey, updatedAt, orgUserId, orgId)
     .run();
   return ((res as any).meta?.changes ?? 0) > 0;
 }

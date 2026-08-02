@@ -94,6 +94,15 @@ export async function handleInviteOrgUsers(request: Request, env: Env, userId: s
     if (existing) return errorResponse('A member with this email already exists in the organization', 400);
   }
 
+  // A send failure for one email must not roll back or block the others: the
+  // membership row + registration code (if any) are already committed per
+  // email by the time we attempt delivery, so a failed send just leaves that
+  // row in 'invited' with no mail sent yet. Recovery path: the owner calls
+  // handleResendOrgInvite for that member, which re-mints a token (and code,
+  // if the recipient still has no account) and retries the send — it does not
+  // require re-running this whole batch.
+  let anyDeliveryFailed = false;
+
   for (const email of parsed.emails) {
     const orgUserId = generateUUID();
     const orgUser: OrganizationUser = {
@@ -125,19 +134,31 @@ export async function handleInviteOrgUsers(request: Request, env: Env, userId: s
     }
 
     const token = await createOrgInviteToken(env.JWT_SECRET, { orgUserId, orgId, email });
-    await sendOrgInviteEmail(env, {
-      toEmail: email,
-      orgName: org.name,
-      orgId,
-      orgUserId,
-      token,
-      inviteCode: code,
-      siteUrl: env.ORG_INVITE_SITE_URL!,
-    });
+    let delivered = true;
+    try {
+      await sendOrgInviteEmail(env, {
+        toEmail: email,
+        orgName: org.name,
+        orgId,
+        orgUserId,
+        token,
+        inviteCode: code,
+        siteUrl: env.ORG_INVITE_SITE_URL!,
+      });
+    } catch {
+      delivered = false;
+      anyDeliveryFailed = true;
+    }
 
-    await writeMemberAudit(storage, request, userId, 'organization.user.invite', orgId, 'info', { targetEmail: email });
+    await writeMemberAudit(storage, request, userId, 'organization.user.invite', orgId, 'info', {
+      targetEmail: email,
+      ...(delivered ? {} : { emailDelivered: false }),
+    });
   }
 
+  if (anyDeliveryFailed) {
+    return errorResponse('Some invitations could not be emailed; use resend', 500);
+  }
   return new Response(null, { status: 200 });
 }
 
@@ -223,7 +244,7 @@ export async function handleAcceptOrgUser(
   }
 
   const now = new Date().toISOString();
-  const accepted = await storage.acceptOrgUser(orgUserId, userId, now);
+  const accepted = await storage.acceptOrgUser(orgUserId, orgId, userId, now);
   if (!accepted) return errorResponse('Invitation is no longer valid', 400);
 
   const contextId = readActingDeviceIdentifier(request);
@@ -247,6 +268,11 @@ export async function handleConfirmOrgUser(
   const org = await getOwnedOrg(storage, orgId, userId);
   if (!org) return errorResponse(ORG_NOT_FOUND, 404);
 
+  // Cross-tenant guard: an orgUserId that resolves but belongs to a different
+  // org must be indistinguishable from one that doesn't exist at all.
+  const targetOrgUser = await storage.getOrgUserById(orgUserId);
+  if (!targetOrgUser || targetOrgUser.orgId !== orgId) return errorResponse(MEMBER_NOT_FOUND, 404);
+
   let body: unknown;
   try {
     body = await request.json();
@@ -257,7 +283,7 @@ export async function handleConfirmOrgUser(
   if (!key || key.length > 4000) return errorResponse('Invalid request body', 400);
 
   const now = new Date().toISOString();
-  const confirmed = await storage.confirmOrgUser(orgUserId, key, now);
+  const confirmed = await storage.confirmOrgUser(orgUserId, orgId, key, now);
   if (!confirmed) return errorResponse('Member is not in the accepted state', 400);
 
   const contextId = readActingDeviceIdentifier(request);

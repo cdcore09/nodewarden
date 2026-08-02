@@ -637,12 +637,12 @@ export class StorageService {
     return listStoredOrgUsers(this.db, orgId);
   }
 
-  async acceptOrgUser(orgUserId: string, userId: string, updatedAt: string): Promise<boolean> {
-    return acceptStoredOrgUser(this.db, orgUserId, userId, updatedAt);
+  async acceptOrgUser(orgUserId: string, orgId: string, userId: string, updatedAt: string): Promise<boolean> {
+    return acceptStoredOrgUser(this.db, orgUserId, orgId, userId, updatedAt);
   }
 
-  async confirmOrgUser(orgUserId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
-    return confirmStoredOrgUser(this.db, orgUserId, encryptedOrgKey, updatedAt);
+  async confirmOrgUser(orgUserId: string, orgId: string, encryptedOrgKey: string, updatedAt: string): Promise<boolean> {
+    return confirmStoredOrgUser(this.db, orgUserId, orgId, encryptedOrgKey, updatedAt);
   }
 
   async deleteOrgUser(orgUserId: string): Promise<void> {
