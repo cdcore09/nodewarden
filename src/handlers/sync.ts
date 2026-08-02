@@ -12,6 +12,7 @@ import { buildDomainsResponse } from '../services/domain-rules';
 import { buildWebAuthnPrfOption } from '../utils/account-passkeys';
 import { buildProfileResponse } from '../utils/profile-response';
 import { loadProfileOrgs } from '../utils/profile-orgs';
+import { collectionDetailsResponse } from './org-shapes';
 
 // CONTRACT:
 // /api/sync reuses cipherToResponse() as the single cipher response shaper.
@@ -94,6 +95,27 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const profileOrgs = await loadProfileOrgs(storage, userId);
   const profile: ProfileResponse = buildProfileResponse(user, env, profileOrgs);
 
+  // Collections visible to the syncing user: owners see every collection in
+  // their org (readOnly=false, hidePasswords=false); confirmed members see
+  // only what's been granted to them, with the grant's own flags. Invited/
+  // unconfirmed memberships are excluded, mirroring loadProfileOrgs.
+  const memberships = await storage.listMembershipsForUser(userId);
+  const collectionResponses: Record<string, unknown>[] = [];
+  for (const membership of memberships) {
+    if (membership.orgUser.status !== 'confirmed') continue;
+    if (membership.orgUser.role === 'owner') {
+      const orgCollections = await storage.listCollections(membership.orgUser.orgId);
+      for (const collection of orgCollections) {
+        collectionResponses.push(collectionDetailsResponse(collection, false, false));
+      }
+    } else {
+      const collectionsWithGrant = await storage.listCollectionsForMember(membership.orgUser.id);
+      for (const cwg of collectionsWithGrant) {
+        collectionResponses.push(collectionDetailsResponse(cwg.collection, cwg.readOnly, cwg.hidePasswords));
+      }
+    }
+  }
+
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {
     const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], { preserveRepairableUris, validFolderIds });
@@ -117,7 +139,7 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const syncResponse: SyncResponse = {
     profile,
     folders: folderResponses,
-    collections: [],
+    collections: collectionResponses,
     ciphers: cipherResponses,
     domains: excludeDomains
       ? null
