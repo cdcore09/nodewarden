@@ -106,6 +106,7 @@ export interface Invite {
   status: 'active' | 'used' | 'revoked' | 'expired';
   createdAt: string;
   updatedAt: string;
+  orgUserId: string | null;
 }
 
 export interface AuditLog {

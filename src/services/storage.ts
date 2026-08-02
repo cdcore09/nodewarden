@@ -28,12 +28,14 @@ import {
   deleteInvalidInvites as deleteStoredInvalidInvites,
   deleteAllInvites as deleteStoredInvites,
   getInvite as findStoredInvite,
+  getActiveInviteForOrgUser as findStoredActiveInviteForOrgUser,
   listAuditLogs as listStoredAuditLogs,
   listInvites as listStoredInvites,
   markInviteUsed as markStoredInviteUsed,
   pruneAuditLogs as pruneStoredAuditLogs,
   pruneAuditLogsToMax as pruneStoredAuditLogsToMax,
   revertInviteUsed as revertStoredInviteUsed,
+  revokeInvitesForOrgUser as revokeStoredInvitesForOrgUser,
 } from './storage-admin-repo';
 import {
   bulkDeleteFolders as deleteStoredFolders,
@@ -196,7 +198,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-08-01-organizations';
+const STORAGE_SCHEMA_VERSION = '2026-08-02-invite-org-user';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -387,6 +389,14 @@ export class StorageService {
 
   async deleteAllInvites(): Promise<number> {
     return deleteStoredInvites(this.db);
+  }
+
+  async getActiveInviteForOrgUser(orgUserId: string): Promise<Invite | null> {
+    return findStoredActiveInviteForOrgUser(this.db, orgUserId);
+  }
+
+  async revokeInvitesForOrgUser(orgUserId: string): Promise<void> {
+    return revokeStoredInvitesForOrgUser(this.db, orgUserId);
   }
 
   async createAuditLog(log: AuditLog): Promise<void> {

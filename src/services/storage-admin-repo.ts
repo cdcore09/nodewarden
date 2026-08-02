@@ -67,21 +67,9 @@ function buildAuditWhere(options: AuditLogListOptions): { where: string; params:
   };
 }
 
-export async function createInvite(db: D1Database, invite: Invite): Promise<void> {
-  await db
-    .prepare(
-      'INSERT INTO invites(code, created_by, used_by, expires_at, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?)'
-    )
-    .bind(invite.code, invite.createdBy, invite.usedBy, invite.expiresAt, invite.status, invite.createdAt, invite.updatedAt)
-    .run();
-}
+const INVITE_COLUMNS = 'code, created_by, used_by, expires_at, status, created_at, updated_at, org_user_id';
 
-export async function getInvite(db: D1Database, code: string): Promise<Invite | null> {
-  const row = await db
-    .prepare('SELECT code, created_by, used_by, expires_at, status, created_at, updated_at FROM invites WHERE code = ?')
-    .bind(code)
-    .first<any>();
-  if (!row) return null;
+function mapInviteRow(row: any): Invite {
   return {
     code: row.code,
     createdBy: row.created_by,
@@ -90,7 +78,35 @@ export async function getInvite(db: D1Database, code: string): Promise<Invite | 
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    orgUserId: row.org_user_id ?? null,
   };
+}
+
+export async function createInvite(db: D1Database, invite: Invite): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO invites(${INVITE_COLUMNS}) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      invite.code,
+      invite.createdBy,
+      invite.usedBy,
+      invite.expiresAt,
+      invite.status,
+      invite.createdAt,
+      invite.updatedAt,
+      invite.orgUserId
+    )
+    .run();
+}
+
+export async function getInvite(db: D1Database, code: string): Promise<Invite | null> {
+  const row = await db
+    .prepare(`SELECT ${INVITE_COLUMNS} FROM invites WHERE code = ?`)
+    .bind(code)
+    .first<any>();
+  if (!row) return null;
+  return mapInviteRow(row);
 }
 
 export async function listInvites(db: D1Database, includeInactive: boolean = false): Promise<Invite[]> {
@@ -99,21 +115,40 @@ export async function listInvites(db: D1Database, includeInactive: boolean = fal
     ? '1 = 1'
     : "(status = 'active' AND expires_at > ?)";
   const query =
-    'SELECT code, created_by, used_by, expires_at, status, created_at, updated_at FROM invites ' +
+    `SELECT ${INVITE_COLUMNS} FROM invites ` +
     `WHERE ${predicate} ORDER BY created_at DESC`;
   const res = includeInactive
     ? await db.prepare(query).all<any>()
     : await db.prepare(query).bind(now).all<any>();
 
-  return (res.results || []).map((row) => ({
-    code: row.code,
-    createdBy: row.created_by,
-    usedBy: row.used_by ?? null,
-    expiresAt: row.expires_at,
-    status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (res.results || []).map(mapInviteRow);
+}
+
+// Finds the single active, unexpired registration code minted for a given
+// pending (account-less) org membership, if any. Used by resend to locate
+// and revoke the prior code before minting a fresh one.
+export async function getActiveInviteForOrgUser(db: D1Database, orgUserId: string): Promise<Invite | null> {
+  const now = new Date().toISOString();
+  const row = await db
+    .prepare(
+      `SELECT ${INVITE_COLUMNS} FROM invites WHERE org_user_id = ? AND status = 'active' AND expires_at > ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .bind(orgUserId, now)
+    .first<any>();
+  if (!row) return null;
+  return mapInviteRow(row);
+}
+
+// Revokes every active registration code linked to a membership — called
+// before minting a fresh resend code (so only the latest code works) and
+// before removing a member (so a dis-invited recipient can no longer
+// register with a code issued earlier).
+export async function revokeInvitesForOrgUser(db: D1Database, orgUserId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .prepare("UPDATE invites SET status = 'revoked', updated_at = ? WHERE org_user_id = ? AND status = 'active'")
+    .bind(now, orgUserId)
+    .run();
 }
 
 export async function markInviteUsed(db: D1Database, code: string, userId: string): Promise<boolean> {

@@ -155,6 +155,7 @@ export async function handleInviteOrgUsers(request: Request, env: Env, userId: s
         status: 'active',
         createdAt: now,
         updatedAt: now,
+        orgUserId,
       });
     }
 
@@ -207,18 +208,28 @@ export async function handleResendOrgInvite(
   if (!isOrgEmailConfigured(env)) return errorResponse('Email is not configured on this server', 500);
   if (!env.ORG_INVITE_SITE_URL) return errorResponse('Email is not configured on this server', 500);
 
-  // Registration codes are minted by the original invite (see
-  // handleInviteOrgUsers) as standalone Invite rows with no orgUserId/email
-  // column linking them back here — so a resend has no way to look up or
-  // revoke whatever code an earlier invite/resend already issued. Minting a
-  // fresh one on every resend would leave an unbounded number of active
-  // 7-day registration codes for the same pending invitee with no way to
-  // clean them up. Since we can never prove none exist, resend never mints
-  // a new one: an account-less invitee reuses the code from their most
-  // recent email. If that email/code is genuinely lost, the recovery path
-  // is to remove and re-invite the member, which starts a fresh org_user
-  // row (and a single fresh code) via handleInviteOrgUsers.
-  const code: string | null = null;
+  // Registration codes minted by handleInviteOrgUsers are now linked back to
+  // this org_user row via invites.org_user_id, so resend can find and revoke
+  // whatever code an earlier invite/resend already issued before minting a
+  // fresh one — no more unbounded pile-up of active codes for the same
+  // pending invitee.
+  const existingUser = await storage.getUser(orgUser.email);
+  let code: string | null = null;
+  if (!existingUser) {
+    await storage.revokeInvitesForOrgUser(orgUserId);
+    code = generateUUID();
+    const now = new Date().toISOString();
+    await storage.createInvite({
+      code,
+      createdBy: userId,
+      usedBy: null,
+      expiresAt: new Date(Date.now() + INVITE_CODE_TTL_MS).toISOString(),
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      orgUserId,
+    });
+  }
 
   const token = await createOrgInviteToken(env.JWT_SECRET, { orgUserId, orgId, email: orgUser.email });
   let delivered = true;
@@ -345,6 +356,10 @@ export async function handleRemoveOrgUser(
   if (orgUser.role === 'owner') return errorResponse('The organization owner cannot be removed', 400);
 
   const removedUserId = orgUser.userId;
+  // Revoke any outstanding registration code before deleting the membership
+  // row, so a dis-invited recipient who still holds an unused invite email
+  // can no longer register with it.
+  await storage.revokeInvitesForOrgUser(orgUserId);
   await storage.deleteOrgUser(orgUserId);
 
   const contextId = readActingDeviceIdentifier(request);
