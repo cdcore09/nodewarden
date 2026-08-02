@@ -30,7 +30,7 @@ async function writeOrgAudit(
 
 // Loads the org ONLY if the requester is a confirmed owner; unauthorized and
 // nonexistent are indistinguishable to the caller (Global Constraint).
-async function getOwnedOrg(
+export async function getOwnedOrg(
   storage: StorageService,
   orgId: string,
   userId: string
