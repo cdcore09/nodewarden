@@ -73,3 +73,39 @@ test('org tables round-trip through backup export/import', async () => {
   const restoredCipherCollections = await target.prepare('SELECT cipher_id, collection_id FROM cipher_collections').all<any>();
   assert.deepEqual((restoredCipherCollections.results || []).map((row: any) => ({ ...row })), [{ cipher_id: 'cph1', collection_id: 'c1' }]);
 });
+
+test('import without replaceExisting is rejected when target already has organization data', async () => {
+  const now = '2026-08-01T00:00:00.000Z';
+
+  // Empty source: a minimal, valid backup archive with no rows at all.
+  const source = createTestDb();
+  const sourceEnv = { DB: source } as unknown as Env;
+  const bundle = await buildBackupArchive(sourceEnv, new Date(now), { includeAttachments: false });
+
+  // Target has zero ciphers/folders/attachments/sends (the pre-existing
+  // freshness check would call this "fresh"), but it already has an
+  // organization + org_user row. The freshness gate must still trip.
+  const target = createTestDb();
+  await target
+    .prepare('INSERT INTO users(id, email, master_password_hash, key, kdf_type, kdf_iterations, security_stamp, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind('u1', 'a@b.c', 'h', 'k', 0, 600000, 's', now, now)
+    .run();
+  await target
+    .prepare('INSERT INTO organizations(id, name, public_key, encrypted_private_key, created_at, updated_at) VALUES(?,?,?,?,?,?)')
+    .bind('o1', '2.n', 'pub', '2.priv', now, now)
+    .run();
+  await target
+    .prepare('INSERT INTO organization_users(id, org_id, user_id, email, role, status, encrypted_org_key, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind('ou1', 'o1', 'u1', 'a@b.c', 'owner', 'confirmed', '4.w', now, now)
+    .run();
+
+  const targetEnv = { DB: target } as unknown as Env;
+  await assert.rejects(
+    () => importBackupArchiveBytes(bundle.bytes, targetEnv, 'u1', false, undefined, bundle.fileName),
+    (error: unknown) => error instanceof Error && error.message === 'Backup import requires a fresh instance with no vault or send data'
+  );
+
+  // The pre-existing org data must survive the rejected import untouched.
+  const survivingOrgs = await target.prepare('SELECT id FROM organizations').all<any>();
+  assert.equal((survivingOrgs.results || []).length, 1);
+});

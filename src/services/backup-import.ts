@@ -183,6 +183,11 @@ async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
     db.prepare('SELECT COUNT(*) AS count FROM folders').first<{ count: number }>(),
     db.prepare('SELECT COUNT(*) AS count FROM attachments').first<{ count: number }>(),
     db.prepare('SELECT COUNT(*) AS count FROM sends').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM organizations').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM organization_users').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM collections').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM collection_users').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM cipher_collections').first<{ count: number }>(),
   ]);
   const total = counts.reduce((sum, row) => sum + Number(row?.count || 0), 0);
   if (total > 0) {
