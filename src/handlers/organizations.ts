@@ -45,6 +45,11 @@ export async function handleCreateOrganization(request: Request, env: Env, userI
   const storage = new StorageService(env.DB);
   const user = await storage.getUserById(userId);
   if (!user) return errorResponse('User not found', 404);
+  // Sole-administrator model (see spec): only the operator-administrator may
+  // create organizations. Message mirrors Vaultwarden's for client familiarity.
+  if (user.role !== 'admin') {
+    return errorResponse('User not allowed to create organizations', 400);
+  }
 
   let body: unknown;
   try {

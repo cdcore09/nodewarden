@@ -52,6 +52,7 @@ import {
   listMembershipsForUser as listStoredMembershipsForUser,
   updateOrganizationName as updateStoredOrganizationName,
   deleteOrganization as deleteStoredOrganization,
+  countOwnedOrganizations as countStoredOwnedOrganizations,
 } from './storage-org-repo';
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
@@ -605,6 +606,10 @@ export class StorageService {
 
   async deleteOrganization(orgId: string): Promise<void> {
     return deleteStoredOrganization(this.db, orgId);
+  }
+
+  async countOwnedOrganizations(userId: string): Promise<number> {
+    return countStoredOwnedOrganizations(this.db, userId);
   }
 
   // --- Attachments ---

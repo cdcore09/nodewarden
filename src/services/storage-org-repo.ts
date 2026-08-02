@@ -120,3 +120,15 @@ export async function updateOrganizationName(
 export async function deleteOrganization(db: D1Database, orgId: string): Promise<void> {
   await db.prepare('DELETE FROM organizations WHERE id = ?').bind(orgId).run();
 }
+
+// Used to block deleting a user who still owns organizations: their
+// organization_users row cascades away on user delete (ON DELETE CASCADE),
+// which would orphan the organizations row (unreachable by any API, and
+// the orphan trips the backup freshness gate for future restores).
+export async function countOwnedOrganizations(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS count FROM organization_users WHERE user_id = ? AND role = 'owner'`)
+    .bind(userId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}

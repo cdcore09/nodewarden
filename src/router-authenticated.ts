@@ -431,6 +431,7 @@ export async function handleAuthenticatedRoute(
     }
   }
 
+  // Phase 2+ org routes MUST be registered above this catch-all stub or they will be silently swallowed (fake empty list on GET, 404 otherwise).
   if (path === '/api/organizations' || path.startsWith('/api/organizations/')) {
     if (method === 'GET') {
       return jsonResponse({ data: [], object: 'list', continuationToken: null });

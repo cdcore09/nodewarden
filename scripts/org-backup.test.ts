@@ -29,8 +29,12 @@ test('org tables round-trip through backup export/import', async () => {
     .bind('c1', 'ou1', 0, 0)
     .run();
   await source
+    .prepare('INSERT INTO ciphers(id, user_id, organization_id, type, name, data, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)')
+    .bind('cph1', 'u1', 'o1', 1, '2.cipherName', '{}', now, now)
+    .run();
+  await source
     .prepare('INSERT INTO ciphers(id, user_id, type, name, data, created_at, updated_at) VALUES(?,?,?,?,?,?,?)')
-    .bind('cph1', 'u1', 1, '2.cipherName', '{}', now, now)
+    .bind('cph2', 'u1', 1, '2.cipherName2', '{}', now, now)
     .run();
   await source
     .prepare('INSERT INTO cipher_collections(cipher_id, collection_id) VALUES(?,?)')
@@ -72,6 +76,12 @@ test('org tables round-trip through backup export/import', async () => {
 
   const restoredCipherCollections = await target.prepare('SELECT cipher_id, collection_id FROM cipher_collections').all<any>();
   assert.deepEqual((restoredCipherCollections.results || []).map((row: any) => ({ ...row })), [{ cipher_id: 'cph1', collection_id: 'c1' }]);
+
+  const restoredCiphers = await target.prepare('SELECT id, organization_id FROM ciphers ORDER BY id ASC').all<any>();
+  assert.deepEqual((restoredCiphers.results || []).map((row: any) => ({ ...row })), [
+    { id: 'cph1', organization_id: 'o1' },
+    { id: 'cph2', organization_id: null },
+  ]);
 });
 
 test('import without replaceExisting is rejected when target already has organization data', async () => {

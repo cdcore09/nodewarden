@@ -56,5 +56,6 @@ CREATE TABLE IF NOT EXISTS cipher_collections (
   FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
 );
 
+-- NOT idempotent: fails if the runtime bootstrap (storage-schema.ts) already added this column. Apply migrations before first boot, or rely on the runtime bootstrap alone.
 ALTER TABLE ciphers ADD COLUMN organization_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_ciphers_org ON ciphers(organization_id);

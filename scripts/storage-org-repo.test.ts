@@ -8,6 +8,7 @@ import {
   listMembershipsForUser,
   updateOrganizationName,
   deleteOrganization,
+  countOwnedOrganizations,
 } from '../src/services/storage-org-repo';
 import type { Organization, OrganizationUser } from '../src/types';
 
@@ -85,6 +86,19 @@ test('duplicate member email in same org is rejected by unique index', async () 
     })
   );
   assert.equal(await getOrganization(db, 'o1b'), null);
+});
+
+test('countOwnedOrganizations reflects ownership across create/delete', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'me@x.y');
+
+  assert.equal(await countOwnedOrganizations(db, 'u1'), 0);
+
+  await createOrganizationWithOwner(db, org('o1'), owner('ou1', 'o1', 'u1', 'me@x.y'));
+  assert.equal(await countOwnedOrganizations(db, 'u1'), 1);
+
+  await deleteOrganization(db, 'o1');
+  assert.equal(await countOwnedOrganizations(db, 'u1'), 0);
 });
 
 import { StorageService } from '../src/services/storage';

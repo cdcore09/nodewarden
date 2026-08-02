@@ -413,6 +413,15 @@ export async function handleAdminDeleteUser(
     return errorResponse('User not found', 404);
   }
 
+  // Deleting the user would cascade-delete their organization_users row
+  // (ON DELETE CASCADE), orphaning any organizations they own: unreachable
+  // by any API, and the orphan trips the backup freshness gate for future
+  // restores. Refuse instead of cascading.
+  const ownedOrgCount = await storage.countOwnedOrganizations(target.id);
+  if (ownedOrgCount > 0) {
+    return errorResponse('Cannot delete a user who owns organizations. Delete their organizations first.', 400);
+  }
+
   // Clean up R2 files before DB cascade deletes the metadata rows.
   // 1. Attachment files (keyed by cipherId/attachmentId)
   const attachmentMap = await storage.getAttachmentsByUserId(target.id);
