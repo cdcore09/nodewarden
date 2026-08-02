@@ -51,3 +51,31 @@ test('organizationToResponse is the full org object', () => {
   assert.equal(o.object, 'organization');
   assert.equal(o.selfHost, true);
 });
+
+import { parseInviteRequest, orgUserDetailsResponse, orgUserListResponse, userPublicKeyResponse } from '../src/handlers/org-shapes';
+
+test('parseInviteRequest normalizes, dedupes, and validates', () => {
+  const ok = parseInviteRequest({ emails: [' A@B.c ', 'a@b.c', 'x@y.z'] });
+  assert.deepEqual(ok, { emails: ['a@b.c', 'x@y.z'] });
+  assert.ok('error' in (parseInviteRequest({ emails: [] }) as any));
+  assert.ok('error' in (parseInviteRequest({ emails: ['nope'] }) as any));
+  assert.ok('error' in (parseInviteRequest({}) as any));
+  assert.ok('error' in (parseInviteRequest({ emails: Array.from({ length: 21 }, (_, i) => `a${i}@b.c`) }) as any));
+});
+
+test('orgUserDetailsResponse maps enums and tolerates a missing user row', () => {
+  const detail = orgUserDetailsResponse(membership.orgUser, { name: 'Me', email: 'a@b.c' }) as any;
+  assert.equal(detail.object, 'organizationUserUserDetails');
+  assert.equal(detail.type, 0);
+  assert.equal(detail.status, 2);
+  assert.equal(detail.name, 'Me');
+  const pending = orgUserDetailsResponse({ ...membership.orgUser, userId: null, status: 'invited', role: 'user' }, null) as any;
+  assert.equal(pending.status, 0);
+  assert.equal(pending.type, 2);
+  assert.equal(pending.email, membership.orgUser.email);
+  const list = orgUserListResponse([detail]) as any;
+  assert.equal(list.object, 'list');
+  assert.equal(list.continuationToken, null);
+  const pk = userPublicKeyResponse('u2', 'PUB') as any;
+  assert.equal(pk.object, 'userKey');
+});

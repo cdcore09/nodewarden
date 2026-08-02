@@ -2,7 +2,7 @@
 // ALL Bitwarden org enum mapping lives here (Global Constraint).
 // Field set follows Vaultwarden's responses; validated against official
 // clients in Phase 3/4 — adjust HERE if a client rejects a shape.
-import type { Organization, OrgMembership, OrgRole, OrgUserStatus } from '../types';
+import type { Organization, OrgMembership, OrgRole, OrgUserStatus, OrganizationUser } from '../types';
 
 export const ORG_TYPE: Record<OrgRole, number> = { owner: 0, user: 2 };
 export const ORG_STATUS: Record<OrgUserStatus, number> = { invited: 0, accepted: 1, confirmed: 2 };
@@ -98,5 +98,59 @@ export function profileOrganizationResponse(m: OrgMembership): Record<string, un
     resetPasswordEnrolled: false,
     userId: orgUser.userId,
     object: 'profileOrganization',
+  };
+}
+
+export function parseInviteRequest(body: unknown): { emails: string[] } | { error: string } {
+  if (!body || typeof body !== 'object' || !Array.isArray((body as any).emails)) {
+    return { error: 'emails is required' };
+  }
+  const emails = Array.from(
+    new Set(
+      ((body as any).emails as unknown[])
+        .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+    )
+  ).filter((e) => e.length > 0);
+  if (!emails.length) return { error: 'At least one email is required' };
+  if (emails.length > 20) return { error: 'Too many invitations in one request (max 20)' };
+  for (const e of emails) {
+    if (!e.includes('@') || e.length < 3) return { error: `Invalid email address: ${e}` };
+  }
+  return { emails };
+}
+
+export function orgUserDetailsResponse(orgUser: OrganizationUser, user: { name: string | null; email: string } | null): Record<string, unknown> {
+  return {
+    object: 'organizationUserUserDetails',
+    type: ORG_TYPE[orgUser.role],
+    status: ORG_STATUS[orgUser.status],
+    id: orgUser.id,
+    userId: orgUser.userId,
+    organizationId: orgUser.orgId,
+    name: user?.name ?? null,
+    email: orgUser.email,
+    avatarColor: null,
+    collections: [],
+    accessAll: true,
+    twoFactorEnabled: false,
+    resetPasswordEnrolled: false,
+    usesKeyConnector: false,
+    hasMasterPassword: true,
+  };
+}
+
+export function orgUserListResponse(items: Record<string, unknown>[]): Record<string, unknown> {
+  return {
+    data: items,
+    object: 'list',
+    continuationToken: null,
+  };
+}
+
+export function userPublicKeyResponse(userId: string, publicKey: string): Record<string, unknown> {
+  return {
+    userId,
+    publicKey,
+    object: 'userKey',
   };
 }
