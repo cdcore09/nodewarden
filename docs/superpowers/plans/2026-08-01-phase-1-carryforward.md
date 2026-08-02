@@ -2,12 +2,18 @@
 
 Durable record of deferred findings from Phase 1's reviews. Source: SDD ledger + final whole-branch review, 2026-08-01. Each item MUST be triaged into the phase plan named below.
 
-## Phase 2 (invite → accept → confirm) MUST address
+## Phase 2 (invite → accept → confirm) — DISCHARGED 2026-08-02
 
-- **Router stub trap:** all new org sub-path routes (invite, confirm, members, public-key, etc.) MUST be registered ABOVE the pre-existing `/api/organizations` catch-all stub in `src/router-authenticated.ts` (warning comment now in place at the stub). Routes registered below it are silently swallowed.
-- **Revision bumps go multi-member:** Phase 1 bumps only the acting owner's revision on org mutations. Once orgs have >1 member, every org mutation must bump ALL confirmed members' revisions and push-notify them (loop over members using the existing per-user machinery).
-- **profileOrgs helper:** the memberships fetch→filter(invited)→map block is triplicated (sync.ts, accounts.ts ×2). Extract `loadProfileOrgs(storage, userId)` before adding a fourth copy.
-- **Admin delete-user guard interplay:** deleting a user who owns orgs is refused (400). Phase 2 member removal must ensure removing a *member* (non-owner) from an org still works when that user is later deleted.
+All Phase 2 obligations below were addressed and verified (branch `feat/organizations-phase-2`, deployed + smoke-tested on vault-test.corderocore.com):
+
+- **Router stub trap:** ✅ new member routes registered above the catch-all (Task 6; verified by final review).
+- **Revision bumps go multi-member:** ✅ `bumpAndNotifyMembers` bumps all confirmed members on confirm/remove/rename/delete; delete captures the member list before cascade (Task 3+6).
+- **profileOrgs helper:** ✅ `src/utils/profile-orgs.ts` extracted; all three call sites use it (Task 2).
+- **Admin delete-user guard interplay:** ✅ member removal is independent of the owner-deletion guard; non-owner removal works and bumps the removed user.
+
+## Phase 3 (collections, sharing, ACL) MUST address — NEW from Phase 2
+
+- **Invite-code ↔ membership linkage:** org invites for account-less recipients mint NodeWarden registration codes, but `invites` rows are NOT linked to `organization_users`. Consequence today: **resend deliberately mints NO code** (to avoid leaking unbounded live registration tokens), so a resent invite to someone who never got the original email is codeless and unusable — recovery is admin remove+re-invite. Phase 3 fix: add an `org_user_id` (or email) column to `invites`, so resend can revoke-and-remint exactly one code per invitee. Also revoke the invitee's registration code when an `invited`/`accepted` member is removed.
 
 ## Phase 3 (collections, sharing, ACL) MUST address
 
