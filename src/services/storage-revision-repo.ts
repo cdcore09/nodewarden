@@ -29,3 +29,20 @@ export async function updateRevisionDate(db: D1Database, userId: string): Promis
     .run();
   return date;
 }
+
+export async function updateRevisionDates(db: D1Database, userIds: string[]): Promise<string> {
+  const date = new Date().toISOString();
+  if (userIds.length === 0) {
+    return date;
+  }
+  const stmts = userIds.map((userId) =>
+    db
+      .prepare(
+        'INSERT INTO user_revisions(user_id, revision_date) VALUES(?, ?) ' +
+          'ON CONFLICT(user_id) DO UPDATE SET revision_date = excluded.revision_date'
+      )
+      .bind(userId, date)
+  );
+  await db.batch(stmts);
+  return date;
+}
