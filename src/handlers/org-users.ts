@@ -40,7 +40,7 @@ async function writeMemberAudit(
 // Bumps the sync revision for every confirmed member of the org and notifies
 // each one over the notifications hub. Shared by confirm and remove — both
 // actions change what the rest of the org sees in their membership list.
-async function bumpAndNotifyMembers(
+export async function bumpAndNotifyMembers(
   env: Env,
   storage: StorageService,
   orgId: string,

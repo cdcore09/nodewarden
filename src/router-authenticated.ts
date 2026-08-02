@@ -102,6 +102,15 @@ import {
   handleUpdateOrganization,
   handleDeleteOrganization,
 } from './handlers/organizations';
+import {
+  handleListOrgUsers,
+  handleInviteOrgUsers,
+  handleResendOrgInvite,
+  handleAcceptOrgUser,
+  handleConfirmOrgUser,
+  handleRemoveOrgUser,
+  handleGetUserPublicKey,
+} from './handlers/org-users';
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -413,6 +422,33 @@ export async function handleAuthenticatedRoute(
       return jsonResponse({ data: [], object: 'list', continuationToken: null });
     }
     return null;
+  }
+
+  {
+    const orgUsersMatch = path.match(/^\/api\/organizations\/([^/]+)\/users$/);
+    if (orgUsersMatch) {
+      if (method === 'GET') return handleListOrgUsers(request, env, userId, orgUsersMatch[1]);
+    }
+    const orgInviteMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/invite$/);
+    if (orgInviteMatch && method === 'POST') {
+      return handleInviteOrgUsers(request, env, userId, orgInviteMatch[1]);
+    }
+    const orgUserActionMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)\/(reinvite|accept|confirm|remove)$/);
+    if (orgUserActionMatch && method === 'POST') {
+      const [, orgId, orgUserId, action] = orgUserActionMatch;
+      if (action === 'reinvite') return handleResendOrgInvite(request, env, userId, orgId, orgUserId);
+      if (action === 'accept') return handleAcceptOrgUser(request, env, userId, orgId, orgUserId);
+      if (action === 'confirm') return handleConfirmOrgUser(request, env, userId, orgId, orgUserId);
+      return handleRemoveOrgUser(request, env, userId, orgId, orgUserId);
+    }
+    const orgUserMatch = path.match(/^\/api\/organizations\/([^/]+)\/users\/([^/]+)$/);
+    if (orgUserMatch && method === 'DELETE') {
+      return handleRemoveOrgUser(request, env, userId, orgUserMatch[1], orgUserMatch[2]);
+    }
+    const publicKeyMatch = path.match(/^\/api\/users\/([^/]+)\/public-key$/);
+    if (publicKeyMatch && method === 'GET') {
+      return handleGetUserPublicKey(request, env, userId, publicKeyMatch[1]);
+    }
   }
 
   if (path === '/api/organizations' && method === 'POST') {

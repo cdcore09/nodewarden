@@ -38,6 +38,7 @@ const ALLOWED_METADATA_KEYS = new Set([
   'userAgent',
   'email',
   'targetEmail',
+  'emailDelivered',
   'grantType',
   'webSession',
   'deviceIdentifier',
