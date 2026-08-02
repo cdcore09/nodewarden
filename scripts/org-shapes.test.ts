@@ -84,3 +84,61 @@ test('orgUserDetailsResponse maps enums and tolerates a missing user row', () =>
   const pk = userPublicKeyResponse('u2', 'PUB') as any;
   assert.equal(pk.object, 'userKey');
 });
+
+import { parseCollectionRequest, parseCollectionGrantsRequest, collectionResponse, collectionDetailsResponse, collectionListResponse } from '../src/handlers/org-shapes';
+import type { Collection } from '../src/types';
+
+const collection: Collection = { id: 'c1', orgId: 'o1', name: '2.encName|x', createdAt: now, updatedAt: now };
+
+test('parseCollectionRequest validates name is non-empty and ≤ 1000 chars', () => {
+  const ok = parseCollectionRequest({ name: '2.encName|x' });
+  assert.deepEqual(ok, { name: '2.encName|x' });
+  assert.ok('error' in (parseCollectionRequest({ name: '' }) as any));
+  assert.ok('error' in (parseCollectionRequest({ name: '   ' }) as any));
+  assert.ok('error' in (parseCollectionRequest({ name: 'x'.repeat(1001) }) as any));
+  assert.ok('error' in (parseCollectionRequest({}) as any));
+  assert.ok('error' in (parseCollectionRequest(null) as any));
+});
+
+test('parseCollectionGrantsRequest maps client users shape to grants', () => {
+  const ok = parseCollectionGrantsRequest({ users: [{ id: 'ou1', readOnly: true, hidePasswords: false }] });
+  assert.deepEqual(ok, { grants: [{ orgUserId: 'ou1', readOnly: true, hidePasswords: false }] });
+
+  // Coerce to booleans, default false
+  const coerce = parseCollectionGrantsRequest({ users: [{ id: 'ou2', readOnly: 'true', hidePasswords: null }] }) as any;
+  assert.deepEqual(coerce.grants, [{ orgUserId: 'ou2', readOnly: true, hidePasswords: false }]);
+
+  // Reject if users missing or not array
+  assert.ok('error' in (parseCollectionGrantsRequest({}) as any));
+  assert.ok('error' in (parseCollectionGrantsRequest({ users: 'nope' }) as any));
+  assert.ok('error' in (parseCollectionGrantsRequest(null) as any));
+});
+
+test('collectionResponse has the correct object tag and fields', () => {
+  const c = collectionResponse(collection) as any;
+  assert.equal(c.id, 'c1');
+  assert.equal(c.organizationId, 'o1');
+  assert.equal(c.name, '2.encName|x');
+  assert.equal(c.externalId, null);
+  assert.equal(c.object, 'collection');
+});
+
+test('collectionDetailsResponse adds readOnly, hidePasswords, manage, and changes object tag', () => {
+  const cd = collectionDetailsResponse(collection, true, false) as any;
+  assert.equal(cd.id, 'c1');
+  assert.equal(cd.organizationId, 'o1');
+  assert.equal(cd.name, '2.encName|x');
+  assert.equal(cd.externalId, null);
+  assert.equal(cd.readOnly, true);
+  assert.equal(cd.hidePasswords, false);
+  assert.equal(cd.manage, false);
+  assert.equal(cd.object, 'collectionDetails');
+});
+
+test('collectionListResponse wraps items with object tag and continuationToken', () => {
+  const list = collectionListResponse([collection]) as any;
+  assert.equal(list.data.length, 1);
+  assert.equal(list.data[0], collection);
+  assert.equal(list.object, 'list');
+  assert.equal(list.continuationToken, null);
+});
