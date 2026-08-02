@@ -19,3 +19,18 @@ test('createTestDb applies the schema and supports basic D1 operations', async (
   const configTableExists = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='config'").first<any>();
   assert.ok(configTableExists, 'config table should exist');
 });
+
+test('organizations schema exists', async () => {
+  const db = createTestDb();
+  const tables = await db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('organizations','organization_users','collections','collection_users','cipher_collections') ORDER BY name"
+    )
+    .all<any>();
+  assert.deepEqual(
+    (tables.results || []).map((r: any) => r.name),
+    ['cipher_collections', 'collection_users', 'collections', 'organization_users', 'organizations']
+  );
+  const cipherCols = await db.prepare("SELECT name FROM pragma_table_info('ciphers') WHERE name='organization_id'").all<any>();
+  assert.equal((cipherCols.results || []).length, 1);
+});
