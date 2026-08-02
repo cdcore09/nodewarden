@@ -13,6 +13,7 @@ type UpdateRevisionDate = (userId: string) => Promise<string>;
 interface CipherRow {
   id: string;
   user_id: string;
+  organization_id: string | null;
   type: number | null;
   folder_id: string | null;
   name: string | null;
@@ -77,6 +78,7 @@ function parseCipherRow(row: CipherRow | null | undefined): Cipher | null {
       ...parsed,
       id: row.id,
       userId: row.user_id,
+      organizationId: row.organization_id ?? null,
       type: Number(row.type) || Number(parsed.type) || 1,
       folderId,
       name: row.name ?? parsed.name ?? null,
@@ -96,7 +98,7 @@ function parseCipherRow(row: CipherRow | null | undefined): Cipher | null {
 }
 
 function selectCipherColumns(): string {
-  return 'id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at';
+  return 'id, user_id, organization_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at';
 }
 
 export async function getCipher(db: D1Database, id: string): Promise<Cipher | null> {
@@ -119,16 +121,17 @@ export async function saveCipher(db: D1Database, safeBind: SafeBind, cipher: Cip
   const folderId = normalizeOptionalId(cipher.folderId);
   const data = buildCipherData(cipher, folderId);
   const stmt = db.prepare(
-    'INSERT INTO ciphers(id, user_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) ' +
-    'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
+    'INSERT INTO ciphers(id, user_id, organization_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at) ' +
+    'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
     'ON CONFLICT(id) DO UPDATE SET ' +
-    'type=excluded.type, folder_id=excluded.folder_id, name=excluded.name, notes=excluded.notes, favorite=excluded.favorite, data=excluded.data, reprompt=excluded.reprompt, key=excluded.key, updated_at=excluded.updated_at, archived_at=excluded.archived_at, deleted_at=excluded.deleted_at ' +
+    'organization_id=excluded.organization_id, type=excluded.type, folder_id=excluded.folder_id, name=excluded.name, notes=excluded.notes, favorite=excluded.favorite, data=excluded.data, reprompt=excluded.reprompt, key=excluded.key, updated_at=excluded.updated_at, archived_at=excluded.archived_at, deleted_at=excluded.deleted_at ' +
     'WHERE user_id=excluded.user_id'
   );
   await safeBind(
     stmt,
     cipher.id,
     cipher.userId,
+    cipher.organizationId ?? null,
     Number(cipher.type) || 1,
     folderId,
     cipher.name,
