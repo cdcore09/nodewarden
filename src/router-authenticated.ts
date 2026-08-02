@@ -111,6 +111,15 @@ import {
   handleRemoveOrgUser,
   handleGetUserPublicKey,
 } from './handlers/org-users';
+import {
+  handleListCollections,
+  handleCreateCollection,
+  handleGetCollection,
+  handleUpdateCollection,
+  handleDeleteCollection,
+  handleGetCollectionUsers,
+  handlePutCollectionUsers,
+} from './handlers/org-collections';
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -464,6 +473,25 @@ export async function handleAuthenticatedRoute(
     const orgDeleteMatch = path.match(/^\/api\/organizations\/([^/]+)\/delete$/);
     if (orgDeleteMatch && method === 'POST') {
       return handleDeleteOrganization(request, env, userId, orgDeleteMatch[1]);
+    }
+  }
+
+  {
+    const collectionsMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections$/);
+    if (collectionsMatch) {
+      if (method === 'GET') return handleListCollections(request, env, userId, collectionsMatch[1]);
+      if (method === 'POST') return handleCreateCollection(request, env, userId, collectionsMatch[1]);
+    }
+    const collectionUsersMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections\/([^/]+)\/users$/);
+    if (collectionUsersMatch) {
+      if (method === 'GET') return handleGetCollectionUsers(request, env, userId, collectionUsersMatch[1], collectionUsersMatch[2]);
+      if (method === 'PUT') return handlePutCollectionUsers(request, env, userId, collectionUsersMatch[1], collectionUsersMatch[2]);
+    }
+    const collectionMatch = path.match(/^\/api\/organizations\/([^/]+)\/collections\/([^/]+)$/);
+    if (collectionMatch) {
+      if (method === 'GET') return handleGetCollection(request, env, userId, collectionMatch[1], collectionMatch[2]);
+      if (method === 'PUT') return handleUpdateCollection(request, env, userId, collectionMatch[1], collectionMatch[2]);
+      if (method === 'DELETE') return handleDeleteCollection(request, env, userId, collectionMatch[1], collectionMatch[2]);
     }
   }
 

@@ -106,6 +106,7 @@ export interface Invite {
   status: 'active' | 'used' | 'revoked' | 'expired';
   createdAt: string;
   updatedAt: string;
+  orgUserId: string | null;
 }
 
 export interface AuditLog {
@@ -713,4 +714,26 @@ export interface OrganizationUser {
 export interface OrgMembership {
   organization: Organization;
   orgUser: OrganizationUser;
+}
+
+// --- Collections (Phase 3a) ---
+export interface Collection {
+  id: string;
+  orgId: string;
+  name: string; // opaque, org-key-encrypted client-side
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionGrant {
+  collectionId: string;
+  orgUserId: string;
+  readOnly: boolean;
+  hidePasswords: boolean;
+}
+
+export interface CollectionWithGrant {
+  collection: Collection;
+  readOnly: boolean;
+  hidePasswords: boolean;
 }

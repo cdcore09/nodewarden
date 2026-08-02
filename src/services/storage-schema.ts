@@ -96,6 +96,8 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
   'ALTER TABLE invites ADD COLUMN used_by TEXT',
   'CREATE INDEX IF NOT EXISTS idx_invites_status_expires ON invites(status, expires_at)',
   'CREATE INDEX IF NOT EXISTS idx_invites_created_by ON invites(created_by, created_at)',
+  'ALTER TABLE invites ADD COLUMN org_user_id TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_invites_org_user ON invites(org_user_id)',
 
   'CREATE TABLE IF NOT EXISTS audit_logs (' +
   'id TEXT PRIMARY KEY, actor_user_id TEXT, action TEXT NOT NULL, category TEXT NOT NULL DEFAULT \'system\', level TEXT NOT NULL DEFAULT \'info\', target_type TEXT, target_id TEXT, metadata TEXT, created_at TEXT NOT NULL, ' +

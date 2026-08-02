@@ -2,7 +2,7 @@
 // ALL Bitwarden org enum mapping lives here (Global Constraint).
 // Field set follows Vaultwarden's responses; validated against official
 // clients in Phase 3/4 — adjust HERE if a client rejects a shape.
-import type { Organization, OrgMembership, OrgRole, OrgUserStatus, OrganizationUser } from '../types';
+import type { Organization, OrgMembership, OrgRole, OrgUserStatus, OrganizationUser, Collection } from '../types';
 
 export const ORG_TYPE: Record<OrgRole, number> = { owner: 0, user: 2 };
 export const ORG_STATUS: Record<OrgUserStatus, number> = { invited: 0, accepted: 1, confirmed: 2 };
@@ -156,5 +156,68 @@ export function userPublicKeyResponse(userId: string, publicKey: string): Record
     userId,
     publicKey,
     object: 'userKey',
+  };
+}
+
+export function parseCollectionRequest(body: unknown): { name: string } | { error: string } {
+  if (!body || typeof body !== 'object') return { error: 'Invalid request body' };
+  const b = body as Record<string, unknown>;
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (!name || name.length > MAX_ENCRYPTED_NAME_LENGTH) return { error: 'Collection name is required' };
+  return { name };
+}
+
+export function parseCollectionGrantsRequest(
+  body: unknown
+): { grants: { orgUserId: string; readOnly: boolean; hidePasswords: boolean }[] } | { error: string } {
+  if (!body || typeof body !== 'object') return { error: 'Invalid request body' };
+  const b = body as Record<string, unknown>;
+  if (!Array.isArray(b.users)) return { error: 'users is required and must be an array' };
+
+  const grants: { orgUserId: string; readOnly: boolean; hidePasswords: boolean }[] = [];
+  for (const user of b.users) {
+    if (!user || typeof user !== 'object') return { error: 'Invalid user in users array' };
+    const u = user as Record<string, unknown>;
+    const orgUserId = typeof u.id === 'string' ? u.id : '';
+    if (!orgUserId) return { error: 'user.id is required' };
+    const readOnly = u.readOnly === true || u.readOnly === 'true';
+    const hidePasswords = u.hidePasswords === true || u.hidePasswords === 'true';
+    grants.push({ orgUserId, readOnly, hidePasswords });
+  }
+  return { grants };
+}
+
+export function collectionResponse(c: Collection): Record<string, unknown> {
+  return {
+    id: c.id,
+    organizationId: c.orgId,
+    name: c.name,
+    externalId: null,
+    object: 'collection',
+  };
+}
+
+export function collectionDetailsResponse(
+  c: Collection,
+  readOnly: boolean,
+  hidePasswords: boolean
+): Record<string, unknown> {
+  return {
+    id: c.id,
+    organizationId: c.orgId,
+    name: c.name,
+    externalId: null,
+    readOnly,
+    hidePasswords,
+    manage: false,
+    object: 'collectionDetails',
+  };
+}
+
+export function collectionListResponse(items: unknown[]): Record<string, unknown> {
+  return {
+    data: items,
+    object: 'list',
+    continuationToken: null,
   };
 }

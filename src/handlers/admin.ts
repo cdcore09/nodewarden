@@ -249,6 +249,7 @@ export async function handleAdminCreateInvite(
     status: 'active',
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
+    orgUserId: null,
   };
 
   await storage.createInvite(invite);
