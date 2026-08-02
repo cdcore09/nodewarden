@@ -1,4 +1,4 @@
-import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
+import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord, Organization, OrganizationUser, OrgMembership } from '../types';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -45,6 +45,15 @@ import {
   getFoldersPage as listStoredFoldersPage,
   saveFolder as saveStoredFolder,
 } from './storage-folder-repo';
+import {
+  createOrganizationWithOwner as createStoredOrganizationWithOwner,
+  getOrganization as getStoredOrganization,
+  getOrgUserByOrgAndUser as getStoredOrgUserByOrgAndUser,
+  listMembershipsForUser as listStoredMembershipsForUser,
+  updateOrganizationName as updateStoredOrganizationName,
+  deleteOrganization as deleteStoredOrganization,
+  countOwnedOrganizations as countStoredOwnedOrganizations,
+} from './storage-org-repo';
 import {
   bulkArchiveCiphers as archiveStoredCiphers,
   bulkDeleteCiphers as deleteStoredCiphers,
@@ -164,7 +173,7 @@ const STORAGE_SCHEMA_VERSION_KEY = 'schema.version';
 // Bump this whenever src/services/storage-schema.ts or migrations/0001_init.sql
 // changes. Existing D1 installs only rerun ensureStorageSchema() when this value
 // differs from config.schema.version.
-const STORAGE_SCHEMA_VERSION = '2026-07-13-refresh-session-reuse';
+const STORAGE_SCHEMA_VERSION = '2026-08-01-organizations';
 const REQUIRED_SCHEMA_TABLES = ['webauthn_credentials', 'webauthn_challenges', 'auth_requests', 'totp_login_replays'] as const;
 
 // D1-backed storage.
@@ -571,6 +580,36 @@ export class StorageService {
 
   async getFoldersPage(userId: string, limit: number, offset: number): Promise<Folder[]> {
     return listStoredFoldersPage(this.db, userId, limit, offset);
+  }
+
+  // --- Organizations ---
+
+  async createOrganizationWithOwner(org: Organization, owner: OrganizationUser): Promise<void> {
+    return createStoredOrganizationWithOwner(this.db, org, owner);
+  }
+
+  async getOrganization(orgId: string): Promise<Organization | null> {
+    return getStoredOrganization(this.db, orgId);
+  }
+
+  async getOrgUserByOrgAndUser(orgId: string, userId: string): Promise<OrganizationUser | null> {
+    return getStoredOrgUserByOrgAndUser(this.db, orgId, userId);
+  }
+
+  async listMembershipsForUser(userId: string): Promise<OrgMembership[]> {
+    return listStoredMembershipsForUser(this.db, userId);
+  }
+
+  async updateOrganizationName(orgId: string, name: string, updatedAt: string): Promise<void> {
+    return updateStoredOrganizationName(this.db, orgId, name, updatedAt);
+  }
+
+  async deleteOrganization(orgId: string): Promise<void> {
+    return deleteStoredOrganization(this.db, orgId);
+  }
+
+  async countOwnedOrganizations(userId: string): Promise<number> {
+    return countStoredOwnedOrganizations(this.db, userId);
   }
 
   // --- Attachments ---

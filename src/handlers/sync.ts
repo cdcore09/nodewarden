@@ -11,6 +11,7 @@ import {
 import { buildDomainsResponse } from '../services/domain-rules';
 import { buildWebAuthnPrfOption } from '../utils/account-passkeys';
 import { buildProfileResponse } from '../utils/profile-response';
+import { profileOrganizationResponse } from './org-shapes';
 
 // CONTRACT:
 // /api/sync reuses cipherToResponse() as the single cipher response shaper.
@@ -90,7 +91,11 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const userDecryptionOptions = buildUserDecryptionOptions(user, webAuthnPrfOptions[0] || null);
   const validFolderIds = new Set(folders.map((folder) => folder.id));
 
-  const profile: ProfileResponse = buildProfileResponse(user, env);
+  const memberships = await storage.listMembershipsForUser(userId);
+  const profileOrgs = memberships
+    .filter((m) => m.orgUser.status !== 'invited')
+    .map(profileOrganizationResponse);
+  const profile: ProfileResponse = buildProfileResponse(user, env, profileOrgs);
 
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {

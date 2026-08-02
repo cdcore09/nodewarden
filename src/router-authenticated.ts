@@ -96,6 +96,12 @@ import {
   handleListPendingAuthRequests,
   handleUpdateAuthRequest,
 } from './handlers/auth-requests';
+import {
+  handleCreateOrganization,
+  handleGetOrganization,
+  handleUpdateOrganization,
+  handleDeleteOrganization,
+} from './handlers/organizations';
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -409,6 +415,23 @@ export async function handleAuthenticatedRoute(
     return null;
   }
 
+  if (path === '/api/organizations' && method === 'POST') {
+    return handleCreateOrganization(request, env, userId);
+  }
+  {
+    const orgMatch = path.match(/^\/api\/organizations\/([^/]+)$/);
+    if (orgMatch) {
+      if (method === 'GET') return handleGetOrganization(request, env, userId, orgMatch[1]);
+      if (method === 'PUT') return handleUpdateOrganization(request, env, userId, orgMatch[1]);
+      if (method === 'DELETE') return handleDeleteOrganization(request, env, userId, orgMatch[1]);
+    }
+    const orgDeleteMatch = path.match(/^\/api\/organizations\/([^/]+)\/delete$/);
+    if (orgDeleteMatch && method === 'POST') {
+      return handleDeleteOrganization(request, env, userId, orgDeleteMatch[1]);
+    }
+  }
+
+  // Phase 2+ org routes MUST be registered above this catch-all stub or they will be silently swallowed (fake empty list on GET, 404 otherwise).
   if (path === '/api/organizations' || path.startsWith('/api/organizations/')) {
     if (method === 'GET') {
       return jsonResponse({ data: [], object: 'list', continuationToken: null });

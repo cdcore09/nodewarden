@@ -678,3 +678,33 @@ export interface SyncResponse {
   } | null;
   object: string;
 }
+
+// --- Organizations (docs/superpowers/specs/2026-08-01-organizations-design.md) ---
+export type OrgRole = 'owner' | 'user';
+export type OrgUserStatus = 'invited' | 'accepted' | 'confirmed';
+
+export interface Organization {
+  id: string;
+  name: string;
+  publicKey: string | null;
+  encryptedPrivateKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationUser {
+  id: string;
+  orgId: string;
+  userId: string | null;
+  email: string;
+  role: OrgRole;
+  status: OrgUserStatus;
+  encryptedOrgKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrgMembership {
+  organization: Organization;
+  orgUser: OrganizationUser;
+}

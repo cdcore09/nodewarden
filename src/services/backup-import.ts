@@ -31,8 +31,18 @@ type BackupTableName =
   | 'webauthn_credentials'
   | 'folders'
   | 'ciphers'
+  | 'organizations'
+  | 'organization_users'
+  | 'collections'
+  | 'collection_users'
+  | 'cipher_collections'
   | 'attachments';
 
+// Order matters: shadow-table swap-in (swapShadowTablesIntoPlace) and row
+// inserts (importBackupRows) run in this order, so each table's FK targets
+// (organizations before organization_users/collections, collections before
+// collection_users, ciphers+collections before cipher_collections) must
+// already be listed earlier.
 const BACKUP_TABLES: BackupTableName[] = [
   'config',
   'users',
@@ -41,6 +51,11 @@ const BACKUP_TABLES: BackupTableName[] = [
   'webauthn_credentials',
   'folders',
   'ciphers',
+  'organizations',
+  'organization_users',
+  'collections',
+  'collection_users',
+  'cipher_collections',
   'attachments',
 ];
 
@@ -58,6 +73,11 @@ export interface BackupImportResultBody {
     webauthnCredentials: number;
     folders: number;
     ciphers: number;
+    organizations: number;
+    organizationUsers: number;
+    collections: number;
+    collectionUsers: number;
+    cipherCollections: number;
     attachments: number;
     attachmentFiles: number;
   };
@@ -163,6 +183,11 @@ async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
     db.prepare('SELECT COUNT(*) AS count FROM folders').first<{ count: number }>(),
     db.prepare('SELECT COUNT(*) AS count FROM attachments').first<{ count: number }>(),
     db.prepare('SELECT COUNT(*) AS count FROM sends').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM organizations').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM organization_users').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM collections').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM collection_users').first<{ count: number }>(),
+    db.prepare('SELECT COUNT(*) AS count FROM cipher_collections').first<{ count: number }>(),
   ]);
   const total = counts.reduce((sum, row) => sum + Number(row?.count || 0), 0);
   if (total > 0) {
@@ -172,8 +197,16 @@ async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
 
 function buildResetImportTargetStatements(db: D1Database): D1PreparedStatement[] {
   return [
+    // Children before parents, mirroring the FK graph: cipher_collections and
+    // collection_users reference ciphers/collections/organization_users, so
+    // they must clear before those tables do.
+    'DELETE FROM cipher_collections',
+    'DELETE FROM collection_users',
     'DELETE FROM attachments',
     'DELETE FROM ciphers',
+    'DELETE FROM collections',
+    'DELETE FROM organization_users',
+    'DELETE FROM organizations',
     'DELETE FROM folders',
     'DELETE FROM webauthn_credentials',
     'DELETE FROM domain_settings',
@@ -314,8 +347,14 @@ async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['
     folders: cloneRows(payload.folders || []),
     ciphers: cloneRows(payload.ciphers || []).map((row) => ({
       ...row,
+      organization_id: row.organization_id ?? null,
       archived_at: row.archived_at ?? null,
     })),
+    organizations: cloneRows(payload.organizations || []),
+    organization_users: cloneRows(payload.organization_users || []),
+    collections: cloneRows(payload.collections || []),
+    collection_users: cloneRows(payload.collection_users || []),
+    cipher_collections: cloneRows(payload.cipher_collections || []),
     attachments: cloneRows(payload.attachments || []),
   };
   await importBackupRows(db, preparedDb, true);
@@ -680,9 +719,39 @@ async function importBackupRows(db: D1Database, payload: BackupPayload['db'], us
     buildInsertStatements(
       db,
       tableName('ciphers'),
-      ['id', 'user_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at'],
+      ['id', 'user_id', 'organization_id', 'type', 'folder_id', 'name', 'notes', 'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at'],
       payload.ciphers || []
     )
+  );
+  await runInsertBatch(
+    db,
+    tableName('organizations'),
+    buildInsertStatements(db, tableName('organizations'), ['id', 'name', 'public_key', 'encrypted_private_key', 'created_at', 'updated_at'], payload.organizations || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('organization_users'),
+    buildInsertStatements(
+      db,
+      tableName('organization_users'),
+      ['id', 'org_id', 'user_id', 'email', 'role', 'status', 'encrypted_org_key', 'created_at', 'updated_at'],
+      payload.organization_users || []
+    )
+  );
+  await runInsertBatch(
+    db,
+    tableName('collections'),
+    buildInsertStatements(db, tableName('collections'), ['id', 'org_id', 'name', 'created_at', 'updated_at'], payload.collections || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('collection_users'),
+    buildInsertStatements(db, tableName('collection_users'), ['collection_id', 'org_user_id', 'read_only', 'hide_passwords'], payload.collection_users || [])
+  );
+  await runInsertBatch(
+    db,
+    tableName('cipher_collections'),
+    buildInsertStatements(db, tableName('cipher_collections'), ['cipher_id', 'collection_id'], payload.cipher_collections || [])
   );
   await runInsertBatch(
     db,
@@ -740,6 +809,11 @@ export async function importBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      collections: (db.collections || []).length,
+      collection_users: (db.collection_users || []).length,
+      cipher_collections: (db.cipher_collections || []).length,
       attachments: (db.attachments || []).length,
     });
 
@@ -763,6 +837,11 @@ export async function importBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      collections: (db.collections || []).length,
+      collection_users: (db.collection_users || []).length,
+      cipher_collections: (db.cipher_collections || []).length,
       attachments: restored.restoredAttachments.length,
     });
     await progress?.({
@@ -804,6 +883,11 @@ export async function importBackupArchiveBytes(
           webauthnCredentials: (db.webauthn_credentials || []).length,
           folders: (db.folders || []).length,
           ciphers: (db.ciphers || []).length,
+          organizations: (db.organizations || []).length,
+          organizationUsers: (db.organization_users || []).length,
+          collections: (db.collections || []).length,
+          collectionUsers: (db.collection_users || []).length,
+          cipherCollections: (db.cipher_collections || []).length,
           attachments: restored.restoredAttachments.length,
           attachmentFiles: restored.imported,
         },
@@ -881,6 +965,11 @@ export async function importRemoteBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      collections: (db.collections || []).length,
+      collection_users: (db.collection_users || []).length,
+      cipher_collections: (db.cipher_collections || []).length,
       attachments: (db.attachments || []).length,
     });
 
@@ -904,6 +993,11 @@ export async function importRemoteBackupArchiveBytes(
       webauthn_credentials: (db.webauthn_credentials || []).length,
       folders: (db.folders || []).length,
       ciphers: (db.ciphers || []).length,
+      organizations: (db.organizations || []).length,
+      organization_users: (db.organization_users || []).length,
+      collections: (db.collections || []).length,
+      collection_users: (db.collection_users || []).length,
+      cipher_collections: (db.cipher_collections || []).length,
       attachments: restored.restoredAttachments.length,
     });
     await progress?.({
@@ -951,6 +1045,11 @@ export async function importRemoteBackupArchiveBytes(
           webauthnCredentials: (db.webauthn_credentials || []).length,
           folders: (db.folders || []).length,
           ciphers: (db.ciphers || []).length,
+          organizations: (db.organizations || []).length,
+          organizationUsers: (db.organization_users || []).length,
+          collections: (db.collections || []).length,
+          collectionUsers: (db.collection_users || []).length,
+          cipherCollections: (db.cipher_collections || []).length,
           attachments: restored.restoredAttachments.length,
           attachmentFiles: restored.imported,
         },
