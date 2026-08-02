@@ -13,7 +13,7 @@ All Phase 2 obligations below were addressed and verified (branch `feat/organiza
 
 ## Phase 3a (collections, grants, access-control chokepoint) — DISCHARGED 2026-08-02
 
-- **Invite-code ↔ membership linkage:** ✅ discharged. `invites` now carries `org_user_id` (migration `0003_invite_org_user.sql`; `storage-schema.ts` bootstrap keeps parity); `getActiveInviteForOrgUser` / `revokeInvitesForOrgUser` (`src/services/storage-admin-repo.ts`) let resend revoke-and-remint exactly one code per invitee, and removal of an `invited`/`accepted` member revokes their outstanding code. Covered by `scripts/invite-linkage.test.ts`.
+- **Invite-code ↔ membership linkage:** ✅ discharged. `invites` now carries `org_user_id` (migration `0003_invite_org_user.sql`; `storage-schema.ts` bootstrap keeps parity); `revokeInvitesForOrgUser` (`src/services/storage-admin-repo.ts`) revokes every prior active code for the `orgUserId` before resend mints a fresh linked code, and removal of an `invited`/`accepted` member also revokes their outstanding code via the same helper. Covered by `scripts/invite-linkage.test.ts`.
 
 ## Phase 3b (org ciphers, sharing enforcement) MUST address
 
@@ -22,6 +22,8 @@ All Phase 2 obligations below were addressed and verified (branch `feat/organiza
 - **Personal-vault query filtering:** existing cipher queries assume user ownership. Once org ciphers are read/written through the fixed repo above, personal-vault queries must filter `organization_id IS NULL` (creator's `user_id` remains set on org ciphers per the ownership invariant).
 - **Backup import referential check:** `validateBackupPayloadContents` does not validate cipher `organization_id` against imported organization ids (no FK either). Add the check alongside the existing userIds/folderIds validation.
 - **collectionName on org create:** Phase 1 accepts but ignores the official client's `collectionName` field. Phase 3b decides whether to honor it (auto-create a default collection).
+- **Share/add-to-collection org consistency:** the share/add-to-collection endpoint must validate `collection.orgId === cipher.organizationId` before linking — no DB constraint enforces cipher↔collection org consistency, and `addCipherToCollections` takes ids blind. (The access chokepoint tolerates a cross-org link safely, but data coherence requires the check.)
+- **`hidePasswords` enforcement:** decide whether `hidePasswords` gets server-side enforcement on cipher responses (stripping password fields for hide-passwords grants) or stays a client-enforced flag. Bitwarden-compatible either way; record the decision.
 
 ## UI phase (4/5) notes
 

@@ -85,6 +85,10 @@ const adminReg = await register(ADMIN_EMAIL);
 check('admin registers (first user)', adminReg.status === 200, `status ${adminReg.status}: ${adminReg.text}`);
 const adminLogin = await login(ADMIN_EMAIL);
 check('admin logs in', adminLogin.status === 200 && adminLogin.json?.access_token, `status ${adminLogin.status}`);
+if (adminLogin.status !== 200 || !adminLogin.json?.access_token) {
+  console.log(`${failures} CHECKS FAILED`);
+  process.exit(1);
+}
 const adminToken = adminLogin.json.access_token;
 
 const orgRes = await api('POST', '/api/organizations', adminToken, {
@@ -109,7 +113,11 @@ if (memberReg.status !== 200) {
   process.exit(failures ? 1 : 2);
 }
 const memberLogin = await login(MEMBER_EMAIL);
-check('member logs in', memberLogin.status === 200, `status ${memberLogin.status}`);
+check('member logs in', memberLogin.status === 200 && memberLogin.json?.access_token, `status ${memberLogin.status}`);
+if (memberLogin.status !== 200 || !memberLogin.json?.access_token) {
+  console.log(`${failures} CHECKS FAILED`);
+  process.exit(1);
+}
 const memberToken = memberLogin.json.access_token;
 
 const acceptRes = await api('POST', `/api/organizations/${orgId}/users/${memberOrgUserId}/accept`, memberToken, {

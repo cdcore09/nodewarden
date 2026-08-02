@@ -28,7 +28,6 @@ import {
   deleteInvalidInvites as deleteStoredInvalidInvites,
   deleteAllInvites as deleteStoredInvites,
   getInvite as findStoredInvite,
-  getActiveInviteForOrgUser as findStoredActiveInviteForOrgUser,
   listAuditLogs as listStoredAuditLogs,
   listInvites as listStoredInvites,
   markInviteUsed as markStoredInviteUsed,
@@ -389,10 +388,6 @@ export class StorageService {
 
   async deleteAllInvites(): Promise<number> {
     return deleteStoredInvites(this.db);
-  }
-
-  async getActiveInviteForOrgUser(orgUserId: string): Promise<Invite | null> {
-    return findStoredActiveInviteForOrgUser(this.db, orgUserId);
   }
 
   async revokeInvitesForOrgUser(orgUserId: string): Promise<void> {

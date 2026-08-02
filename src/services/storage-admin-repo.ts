@@ -124,21 +124,6 @@ export async function listInvites(db: D1Database, includeInactive: boolean = fal
   return (res.results || []).map(mapInviteRow);
 }
 
-// Finds the single active, unexpired registration code minted for a given
-// pending (account-less) org membership, if any. Used by resend to locate
-// and revoke the prior code before minting a fresh one.
-export async function getActiveInviteForOrgUser(db: D1Database, orgUserId: string): Promise<Invite | null> {
-  const now = new Date().toISOString();
-  const row = await db
-    .prepare(
-      `SELECT ${INVITE_COLUMNS} FROM invites WHERE org_user_id = ? AND status = 'active' AND expires_at > ? ORDER BY created_at DESC LIMIT 1`
-    )
-    .bind(orgUserId, now)
-    .first<any>();
-  if (!row) return null;
-  return mapInviteRow(row);
-}
-
 // Revokes every active registration code linked to a membership — called
 // before minting a fresh resend code (so only the latest code works) and
 // before removing a member (so a dis-invited recipient can no longer

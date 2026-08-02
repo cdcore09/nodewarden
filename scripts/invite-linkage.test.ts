@@ -4,14 +4,12 @@ import { createTestDb } from './test-db';
 import {
   createInvite,
   getInvite,
-  getActiveInviteForOrgUser,
   revokeInvitesForOrgUser,
 } from '../src/services/storage-admin-repo';
 import type { Invite } from '../src/types';
 
 const now = '2026-08-02T00:00:00.000Z';
 const future = '2026-08-09T00:00:00.000Z';
-const past = '2026-08-01T00:00:00.000Z';
 
 async function seedUser(db: any, id: string, email: string): Promise<void> {
   await db
@@ -53,42 +51,6 @@ test('createInvite + getInvite preserves null org_user_id for account-based invi
   assert.equal(fetched?.orgUserId, null);
 });
 
-test('getActiveInviteForOrgUser finds an active, unexpired invite', async () => {
-  const db = createTestDb();
-  await seedUser(db, 'u1', 'owner@x.y');
-  await createInvite(db, invite({ code: 'c2', orgUserId: 'ou2' }));
-
-  const found = await getActiveInviteForOrgUser(db, 'ou2');
-  assert.equal(found?.code, 'c2');
-});
-
-test('getActiveInviteForOrgUser ignores expired invites', async () => {
-  const db = createTestDb();
-  await seedUser(db, 'u1', 'owner@x.y');
-  await createInvite(db, invite({ code: 'c3', orgUserId: 'ou3', expiresAt: past }));
-
-  const found = await getActiveInviteForOrgUser(db, 'ou3');
-  assert.equal(found, null);
-});
-
-test('getActiveInviteForOrgUser ignores non-active status', async () => {
-  const db = createTestDb();
-  await seedUser(db, 'u1', 'owner@x.y');
-  await createInvite(db, invite({ code: 'c4', orgUserId: 'ou4', status: 'used' }));
-
-  const found = await getActiveInviteForOrgUser(db, 'ou4');
-  assert.equal(found, null);
-});
-
-test('getActiveInviteForOrgUser returns null when no invite is linked to the org user', async () => {
-  const db = createTestDb();
-  await seedUser(db, 'u1', 'owner@x.y');
-  await createInvite(db, invite({ code: 'c5', orgUserId: null }));
-
-  const found = await getActiveInviteForOrgUser(db, 'ou-missing');
-  assert.equal(found, null);
-});
-
 test('revokeInvitesForOrgUser flips active invites to revoked', async () => {
   const db = createTestDb();
   await seedUser(db, 'u1', 'owner@x.y');
@@ -98,9 +60,6 @@ test('revokeInvitesForOrgUser flips active invites to revoked', async () => {
 
   const fetched = await getInvite(db, 'c6');
   assert.equal(fetched?.status, 'revoked');
-
-  const found = await getActiveInviteForOrgUser(db, 'ou6');
-  assert.equal(found, null);
 });
 
 test('revokeInvitesForOrgUser leaves other org users\' invites untouched', async () => {
