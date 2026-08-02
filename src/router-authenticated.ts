@@ -96,6 +96,12 @@ import {
   handleListPendingAuthRequests,
   handleUpdateAuthRequest,
 } from './handlers/auth-requests';
+import {
+  handleCreateOrganization,
+  handleGetOrganization,
+  handleUpdateOrganization,
+  handleDeleteOrganization,
+} from './handlers/organizations';
 
 export async function handleAuthenticatedRoute(
   request: Request,
@@ -407,6 +413,22 @@ export async function handleAuthenticatedRoute(
       return jsonResponse({ data: [], object: 'list', continuationToken: null });
     }
     return null;
+  }
+
+  if (path === '/api/organizations' && method === 'POST') {
+    return handleCreateOrganization(request, env, userId);
+  }
+  {
+    const orgMatch = path.match(/^\/api\/organizations\/([^/]+)$/);
+    if (orgMatch) {
+      if (method === 'GET') return handleGetOrganization(request, env, userId, orgMatch[1]);
+      if (method === 'PUT') return handleUpdateOrganization(request, env, userId, orgMatch[1]);
+      if (method === 'DELETE') return handleDeleteOrganization(request, env, userId, orgMatch[1]);
+    }
+    const orgDeleteMatch = path.match(/^\/api\/organizations\/([^/]+)\/delete$/);
+    if (orgDeleteMatch && method === 'POST') {
+      return handleDeleteOrganization(request, env, userId, orgDeleteMatch[1]);
+    }
   }
 
   if (path === '/api/organizations' || path.startsWith('/api/organizations/')) {
