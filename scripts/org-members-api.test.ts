@@ -87,3 +87,12 @@ test('confirm flow composition: wrapped org key is POSTed verbatim and round-tri
   const unwrapped = await unwrapOrgKey(calls[0].body.key, pair.privateKey);
   assert.deepEqual(Array.from(unwrapped), Array.from(orgKey));
 });
+
+test('acceptOrgInvitation POSTs {token} to the accept endpoint', async () => {
+  const { acceptOrgInvitation } = await import('../webapp/src/lib/api/organizations');
+  const { authedFetch, calls } = stubFetch({});
+  await acceptOrgInvitation(authedFetch, 'org1', 'ou1', 'tok.abc');
+  assert.equal(calls[0].path, '/api/organizations/org1/users/ou1/accept');
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { token: 'tok.abc' });
+});

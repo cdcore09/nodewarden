@@ -73,7 +73,9 @@ import { clearPasswordSecurityCache } from '@/lib/password-security-cache';
 import { decryptCollections, decryptSends, decryptVaultCore } from '@/lib/vault-decrypt';
 import { decryptSendsInWorker, decryptVaultCoreInWorker } from '@/lib/vault-worker';
 import { getAccountRsaPrivateKey, unwrapOrgKey } from '@/lib/org-crypto';
-import { getProfileOrganizations } from '@/lib/api/organizations';
+import { acceptOrgInvitation, getProfileOrganizations } from '@/lib/api/organizations';
+import { readOrgInviteFromUrl, clearOrgInviteFromUrl, type OrgInviteLink } from '@/lib/org-invite';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { base64ToBytes } from '@/lib/crypto';
 import {
   DEMO_CIPHERS,
@@ -203,6 +205,7 @@ export default function App() {
     []
   );
   const initialInviteCode = useMemo(() => readInviteCodeFromUrl(), []);
+  const initialOrgInvite = useMemo(() => readOrgInviteFromUrl(), []);
   const initialProfileSnapshot = useMemo(
     () => (IS_DEMO_MODE ? null : loadProfileSnapshot(initialBootstrap.session?.email)),
     [initialBootstrap]
@@ -236,6 +239,8 @@ export default function App() {
     hint: null,
   });
   const [inviteCodeFromUrl, setInviteCodeFromUrl] = useState(initialInviteCode);
+  const [pendingOrgInvite, setPendingOrgInvite] = useState<OrgInviteLink | null>(initialOrgInvite);
+  const [orgInviteAccepting, setOrgInviteAccepting] = useState(false);
   const [hashPathRaw, setHashPathRaw] = useState(() => (typeof window !== 'undefined' ? window.location.hash || '' : ''));
   const [unlockPassword, setUnlockPassword] = useState('');
   const [pendingTotp, setPendingTotp] = useState<PendingTotp | null>(null);
@@ -351,6 +356,30 @@ export default function App() {
     setInviteCodeFromUrl('');
   }, [inviteCodeFromUrl, phase, location, navigate]);
 
+  // Org invitation deep link (#/accept-organization): route logged-out
+  // recipients into register/login with the email (and registration code, if
+  // any) prefilled; the accept prompt itself renders once the app is open.
+  const orgInviteRoutedRef = useRef(false);
+  useEffect(() => {
+    if (!pendingOrgInvite || orgInviteRoutedRef.current) return;
+    orgInviteRoutedRef.current = true;
+    clearOrgInviteFromUrl();
+    // replaceState does not fire hashchange; resync the hash-route state so
+    // the cleared hash stops driving routeLocation.
+    setHashPathRaw(typeof window !== 'undefined' ? window.location.hash || '' : '');
+    if (phase === 'locked' || phase === 'app') return;
+    setRegisterValues((prev) => ({
+      ...prev,
+      email: prev.email || pendingOrgInvite.email,
+      inviteCode: pendingOrgInvite.inviteCode || prev.inviteCode,
+    }));
+    setLoginValues((prev) => ({ ...prev, email: prev.email || pendingOrgInvite.email }));
+    if (pendingOrgInvite.inviteCode) {
+      setPhase('register');
+      if (location !== '/register') navigate('/register');
+    }
+  }, [pendingOrgInvite, phase, location, navigate]);
+
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     const media = window.matchMedia('(max-width: 1180px)');
@@ -452,6 +481,20 @@ export default function App() {
       ),
     [session]
   );
+  const acceptPendingOrgInvite = async () => {
+    if (!pendingOrgInvite || orgInviteAccepting) return;
+    setOrgInviteAccepting(true);
+    try {
+      await acceptOrgInvitation(authedFetch, pendingOrgInvite.orgId, pendingOrgInvite.orgUserId, pendingOrgInvite.token);
+      pushToast('success', t('txt_org_accept_success'));
+      setPendingOrgInvite(null);
+    } catch (e) {
+      pushToast('error', e instanceof Error && e.message ? e.message : t('txt_org_accept_failed'));
+    } finally {
+      setOrgInviteAccepting(false);
+    }
+  };
+
   const importAuthedFetch = useMemo(
     () => async (input: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers || {});
@@ -2005,9 +2048,10 @@ export default function App() {
   const isRecoverTwoFactorRoute = effectiveLocation === '/recover-2fa';
   const isPublicSendRoute = !!publicSendMatch;
   const isOrgDetailRoute = !!orgDetailMatch;
+  const isAcceptOrgRoute = routeLocation === '/accept-organization';
   const isMalformedSendRoute = /^\/send(?:\/|$)/i.test(effectiveLocation) && !publicSendMatch;
-  const isKnownAuthRoute = AUTH_ROUTES.has(routeLocation) || isPublicSendRoute || isRecoverTwoFactorRoute;
-  const isKnownAppRoute = APP_ROUTES.has(routeLocation) || isPublicSendRoute || isImportHashRoute || isOrgDetailRoute;
+  const isKnownAuthRoute = AUTH_ROUTES.has(routeLocation) || isPublicSendRoute || isRecoverTwoFactorRoute || isAcceptOrgRoute;
+  const isKnownAppRoute = APP_ROUTES.has(routeLocation) || isPublicSendRoute || isImportHashRoute || isOrgDetailRoute || isAcceptOrgRoute;
   const isUnknownRoute = isMalformedSendRoute || (phase === 'app' ? !isKnownAppRoute : !isKnownAuthRoute && !APP_ROUTES.has(routeLocation));
   const isImportRoute = routeLocation === IMPORT_ROUTE || IMPORT_ROUTE_ALIASES.has(routeLocation);
   const showSidebarToggle = mobileLayout && location === '/sends';
@@ -2458,6 +2502,20 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onToggleMobileSidebar={() => setMobileSidebarToggleKey((key) => key + 1)}
         mainRoutesProps={effectiveMainRoutesProps}
+      />
+
+      <ConfirmDialog
+        open={!!pendingOrgInvite}
+        title={t('txt_org_accept_title')}
+        message={t('txt_org_accept_message', { email: pendingOrgInvite?.email || '' })}
+        confirmText={orgInviteAccepting ? t('txt_org_accepting') : t('txt_org_accept_button')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={orgInviteAccepting}
+        cancelDisabled={orgInviteAccepting}
+        onConfirm={() => void acceptPendingOrgInvite()}
+        onCancel={() => {
+          if (!orgInviteAccepting) setPendingOrgInvite(null);
+        }}
       />
 
       <AppGlobalOverlays
