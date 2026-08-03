@@ -187,3 +187,35 @@ test('getAccessibleOrgCiphers dedupes a cipher reachable via multiple granted co
   assert.equal(memberCiphers.length, 1);
   assert.deepEqual((memberCiphers[0] as any).collectionIds.sort(), ['collA', 'collB']);
 });
+
+test('getAccessibleOrgCiphers: a stale cipher_collections row from a former org does not leak the cipher across tenants', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'ownerA', 'ownerA@x.y');
+  await seedUser(db, 'ownerB', 'ownerB@x.y');
+  await seedUser(db, 'memberA', 'memberA@x.y');
+  const storage = new StorageService(db as any);
+
+  // Two separate orgs, A and B.
+  await storage.createOrganizationWithOwner(org('orgA'), orgUser('ou-ownerA', 'orgA', 'ownerA', 'ownerA@x.y', 'owner', 'confirmed'));
+  await storage.createOrganizationWithOwner(org('orgB'), orgUser('ou-ownerB', 'orgB', 'ownerB', 'ownerB@x.y', 'owner', 'confirmed'));
+
+  // memberA is a confirmed, granted member of Org A's collection.
+  await storage.createOrgUserInvite(orgUser('ou-memberA', 'orgA', null, 'memberA@x.y', 'user', 'invited'));
+  await storage.acceptOrgUser('ou-memberA', 'orgA', 'memberA', now);
+  await storage.confirmOrgUser('ou-memberA', 'orgA', '4.wrapped-memberA', now);
+  await storage.createCollection(collection('collA', 'orgA'));
+  await storage.setGrant({ collectionId: 'collA', orgUserId: 'ou-memberA', readOnly: false, hidePasswords: false });
+
+  // A cipher that ACTUALLY belongs to Org B (organization_id = orgB) --
+  // simulating the state left behind by a reshare from Org A to Org B, where
+  // the cipher's organization_id moved but the OLD cipher_collections row
+  // pointing at Org A's collection was never cleaned up.
+  await storage.saveCipher(makeCipher('reshared-cipher', 'ownerA', 'orgB'));
+  await storage.addCipherToCollections('reshared-cipher', ['collA']);
+
+  // memberA (Org A, granted on collA) must NOT see a cipher that now belongs
+  // to Org B, even though the stale cipher_collections row still links it to
+  // their granted collection.
+  const memberACiphers = await storage.getAccessibleOrgCiphers('memberA');
+  assert.deepEqual(memberACiphers.map((c) => c.id), []);
+});

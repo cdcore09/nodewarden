@@ -1277,6 +1277,19 @@ export async function handleShareCipher(request: Request, env: Env, userId: stri
     return errorResponse('Cipher not found', 404);
   }
 
+  // SECURITY: Bitwarden's /share only ever moves a PERSONAL cipher into an
+  // org. Reject reshare of a cipher that already belongs to an org (moving
+  // Org A -> Org B). Reshare would move `organization_id` to the new org but
+  // leave the OLD org's `cipher_collections` row behind (addCipherToCollections
+  // only INSERTs the new grant; nothing here deletes the stale one) -- a
+  // cross-tenant leak where Org A members keep seeing a cipher that now
+  // belongs to Org B. getOrgCiphersForMember is hardened as a second,
+  // independent layer against exactly this (see storage-cipher-repo.ts), but
+  // this guard stops the stale row from ever being created in the first place.
+  if (existingCipher.organizationId) {
+    return errorResponse('Cipher already belongs to an organization', 400);
+  }
+
   let body: any;
   try {
     body = await request.json();

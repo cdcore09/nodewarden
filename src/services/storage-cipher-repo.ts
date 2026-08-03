@@ -279,17 +279,28 @@ export async function getOrgCiphersForOwner(db: D1Database, orgId: string): Prom
 // through collection_users on the caller-supplied org_user_id, and callers
 // must only pass a CONFIRMED membership's org_user_id (an invited/accepted
 // row must never reach this query with intent to grant access).
-export async function getOrgCiphersForMember(db: D1Database, orgUserId: string): Promise<Cipher[]> {
+//
+// The explicit `c.organization_id = ?` guard is the root-cause fix for a
+// cross-org leak: a cipher shared from Org A into Org B (see Task 6's
+// handleShareCipher) moves its `organization_id` column but
+// storage.addCipherToCollections only INSERTs the new Org-B collection rows
+// -- it never deletes the old Org-A `cipher_collections` row. Without this
+// guard, that stale row alone would make the cipher keep matching every Org-A
+// member's grant here forever, even though the cipher no longer belongs to
+// Org A. Requiring the cipher's own organization_id to match the caller's org
+// closes the leak at the query, regardless of how a stale/inconsistent
+// cipher_collections row came to exist.
+export async function getOrgCiphersForMember(db: D1Database, orgUserId: string, orgId: string): Promise<Cipher[]> {
   const res = await db
     .prepare(
       `SELECT DISTINCT ${selectCipherColumns('c')}
        FROM ciphers c
        JOIN cipher_collections cc ON cc.cipher_id = c.id
        JOIN collection_users cu ON cu.collection_id = cc.collection_id
-       WHERE cu.org_user_id = ?
+       WHERE cu.org_user_id = ? AND c.organization_id = ?
        ORDER BY c.updated_at DESC`
     )
-    .bind(orgUserId)
+    .bind(orgUserId, orgId)
     .all<CipherRow>();
   return (res.results || []).flatMap((row) => {
     const cipher = parseCipherRow(row);

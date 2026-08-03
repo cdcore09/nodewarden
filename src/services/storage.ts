@@ -585,7 +585,7 @@ export class StorageService {
       if (membership.orgUser.status !== 'confirmed') continue;
       const orgCiphers = membership.orgUser.role === 'owner'
         ? await listStoredOrgCiphersForOwner(this.db, membership.orgUser.orgId)
-        : await listStoredOrgCiphersForMember(this.db, membership.orgUser.id);
+        : await listStoredOrgCiphersForMember(this.db, membership.orgUser.id, membership.orgUser.orgId);
       for (const cipher of orgCiphers) {
         byId.set(cipher.id, cipher);
       }
