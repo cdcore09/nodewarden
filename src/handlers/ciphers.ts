@@ -1029,6 +1029,16 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
       return errorResponse('Cipher not found', 404);
     }
 
+    // A non-owner member with no target collection would create an org
+    // cipher it immediately can't read or write itself (canRead/canWriteCipher
+    // require a granted collection for non-owners) — only the owner could
+    // ever reach it again. Require at least one target collection for
+    // non-owner creators; owners may create unassigned (owner-bypass gives
+    // them access regardless of collections).
+    if (orgUser.role !== 'owner' && requestedCollectionIds.length === 0) {
+      return errorResponse('An organization member must assign the item to at least one collection', 400);
+    }
+
     if (requestedCollectionIds.length > 0) {
       const collections = await Promise.all(
         requestedCollectionIds.map((cid) => storage.getCollection(cid))
@@ -1236,7 +1246,12 @@ export async function handleDeleteCipherCompat(request: Request, env: Env, userI
 
   if (cipher.deletedAt) {
     await deleteAllAttachmentsForCipher(env, id);
-    await storage.deleteCipher(id, userId);
+    // storage.deleteCipher scopes its DELETE by owning user_id — for an org
+    // cipher the actor (userId) may be a confirmed owner/writer who is NOT
+    // the cipher's creator, so this must use the cipher's own owner id, not
+    // the acting user's id, or the row silently survives (0 rows deleted)
+    // while the handler still reports success.
+    await storage.deleteCipher(id, cipher.userId);
     const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyCipherDeleteForRequest(request, env, cipher, revisionDate);
@@ -1264,7 +1279,10 @@ export async function handlePermanentDeleteCipher(request: Request, env: Env, us
   // Delete all attachments first
   await deleteAllAttachmentsForCipher(env, id);
 
-  await storage.deleteCipher(id, userId);
+  // See handleDeleteCipherCompat: must use the cipher's owner id, not the
+  // acting user's id, so a confirmed org owner/writer permanently deleting
+  // someone else's org cipher actually removes the row.
+  await storage.deleteCipher(id, cipher.userId);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherDeleteForRequest(request, env, cipher, revisionDate);
