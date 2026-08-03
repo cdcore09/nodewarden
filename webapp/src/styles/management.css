@@ -1849,6 +1849,13 @@
   outline-offset: -2px;
 }
 
+.org-status-0 { color: var(--muted); background: var(--panel-soft); }
+.org-status-1 { color: #92400e; background: #fff7e6; }
+.org-status-2 { color: #16704d; background: #ecfdf3; }
+
+:root[data-theme='dark'] .org-status-1 { color: #fbbf24; background: rgba(180, 83, 9, .18); }
+:root[data-theme='dark'] .org-status-2 { color: #6ee7b7; background: rgba(22, 112, 77, .2); }
+
 .authorized-devices-table {
   table-layout: fixed;
 }

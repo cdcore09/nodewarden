@@ -1482,7 +1482,16 @@ Object.assign(fr, {
   "txt_org_back": "Back",
   "txt_org_not_found": "Organization not found.",
   "txt_org_members_tab": "Members",
-  "txt_org_members_loading": "Loading members…"
+  "txt_org_members_loading": "Loading members…",
+  "txt_org_status_invited": "Invited",
+  "txt_org_status_accepted": "Accepted",
+  "txt_org_status_confirmed": "Confirmed",
+  "txt_org_members_empty": "No members yet",
+  "txt_org_members_error": "Failed to load members",
+  "txt_org_col_member": "Member",
+  "txt_org_col_role": "Role",
+  "txt_org_col_status": "Status",
+  "txt_org_col_actions": "Actions"
 });
 
 export default fr;
