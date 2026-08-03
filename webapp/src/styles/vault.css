@@ -860,7 +860,9 @@ select.input.duplicate-mode-toolbar-select {
 
 .kv-row {
   @apply grid items-center gap-2.5 py-2.5;
-  grid-template-columns: minmax(0px, 80px) minmax(0, 1fr) auto;
+  /* Floor the value column so the auto-sized actions column wraps its
+     buttons instead of collapsing the value to 0 width. */
+  grid-template-columns: minmax(0px, 80px) minmax(min(35%, 140px), 1fr) auto;
   border-bottom: 1px solid rgba(154, 172, 205, 0.22);
 }
 
