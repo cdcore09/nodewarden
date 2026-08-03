@@ -4,6 +4,7 @@ import type { Profile } from '@/lib/types';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { getProfileOrganizations, ORGANIZATION_TYPE_OWNER } from '@/lib/api/organizations';
 import { useOrgMemberActions } from '@/hooks/useOrgMemberActions';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { t } from '@/lib/i18n';
 
 const MEMBER_STATUS_KEYS = ['txt_org_status_invited', 'txt_org_status_accepted', 'txt_org_status_confirmed'] as const;
@@ -15,6 +16,13 @@ function memberRoleLabel(type: number): string {
 function memberStatusLabel(status: number): string {
   const key = MEMBER_STATUS_KEYS[status] ?? MEMBER_STATUS_KEYS[0];
   return t(key);
+}
+
+function parseInviteEmails(raw: string): string[] {
+  return raw
+    .split(/[\s,;]+/)
+    .map((email) => email.trim())
+    .filter(Boolean);
 }
 
 interface OrganizationDetailPageProps {
@@ -32,11 +40,36 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
     [props.profile, props.orgId]
   );
   const [tab] = useState<'members'>('members');
-  const { members, loading, error } = useOrgMemberActions({
+  const { members, loading, error, invite } = useOrgMemberActions({
     authedFetch: props.authedFetch,
     orgId: props.orgId,
     onNotify: props.onNotify,
   });
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteInput, setInviteInput] = useState('');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const inviteEmails = useMemo(() => parseInviteEmails(inviteInput), [inviteInput]);
+  const inviteValid = inviteEmails.length > 0 && inviteEmails.every((email) => email.includes('@'));
+
+  const closeInviteDialog = () => {
+    if (inviteSubmitting) return;
+    setInviteOpen(false);
+    setInviteInput('');
+  };
+
+  const submitInvite = async () => {
+    if (!inviteValid || inviteSubmitting) return;
+    setInviteSubmitting(true);
+    try {
+      await invite(inviteEmails);
+      setInviteOpen(false);
+      setInviteInput('');
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_invite_failed'));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
 
   if (!org) {
     return (
@@ -59,6 +92,9 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
             {t('txt_org_back')}
           </button>
           <h3>{org.name}</h3>
+          <button type="button" className="btn btn-primary small" onClick={() => setInviteOpen(true)}>
+            {t('txt_org_invite_button')}
+          </button>
         </div>
         <div className="settings-category-tabs" role="tablist" aria-label={t('txt_org_members_tab')}>
           <button type="button" role="tab" aria-selected={tab === 'members'} className="settings-category-tab active">
@@ -108,6 +144,29 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
           </table>
         )}
       </section>
+
+      <ConfirmDialog
+        open={inviteOpen}
+        title={t('txt_org_invite_title')}
+        message={t('txt_org_invite_message')}
+        confirmText={inviteSubmitting ? t('txt_org_inviting') : t('txt_org_invite_button')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={inviteSubmitting || !inviteValid}
+        cancelDisabled={inviteSubmitting}
+        onConfirm={() => void submitInvite()}
+        onCancel={closeInviteDialog}
+      >
+        <label className="field">
+          <span>{t('txt_email')}</span>
+          <input
+            className="input"
+            type="text"
+            value={inviteInput}
+            placeholder={t('txt_org_invite_email_placeholder')}
+            onInput={(e) => setInviteInput((e.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+      </ConfirmDialog>
     </div>
   );
 }

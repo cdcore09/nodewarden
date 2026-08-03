@@ -1521,7 +1521,14 @@ Object.assign(zhCN, {
   "txt_org_col_member": "Member",
   "txt_org_col_role": "Role",
   "txt_org_col_status": "Status",
-  "txt_org_col_actions": "Actions"
+  "txt_org_col_actions": "Actions",
+  "txt_org_invite_button": "Invite member",
+  "txt_org_inviting": "Inviting…",
+  "txt_org_invite_title": "Invite member",
+  "txt_org_invite_message": "Enter one or more email addresses, separated by commas or spaces.",
+  "txt_org_invite_email_placeholder": "member@example.com",
+  "txt_org_invite_sent": "Invitation sent",
+  "txt_org_invite_failed": "Failed to invite members"
 });
 
 export default zhCN;

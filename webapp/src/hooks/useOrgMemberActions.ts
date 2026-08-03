@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { AuthedFetch } from '@/lib/api/shared';
-import { listOrgUsers, type OrgMember } from '@/lib/api/organizations';
+import { inviteOrgUsers, listOrgUsers, type OrgMember } from '@/lib/api/organizations';
+import { t } from '@/lib/i18n';
 
 type Notify = (type: 'success' | 'error' | 'warning', text: string) => void;
 
@@ -33,7 +34,16 @@ export function useOrgMemberActions(opts: UseOrgMemberActionsOptions) {
     void reload();
   }, [reload]);
 
-  return { members, loading, error, reload };
+  const invite = useCallback(
+    async (emails: string[]) => {
+      await inviteOrgUsers(opts.authedFetch, opts.orgId, emails);
+      await reload();
+      opts.onNotify?.('success', t('txt_org_invite_sent'));
+    },
+    [opts.authedFetch, opts.orgId, reload]
+  );
+
+  return { members, loading, error, reload, invite };
 }
 
 export default useOrgMemberActions;
