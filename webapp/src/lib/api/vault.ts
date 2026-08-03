@@ -1041,7 +1041,8 @@ async function repairCipherLoginUris(
 export async function repairCipherUriChecksums(
   authedFetch: AuthedFetch,
   session: SessionState,
-  ciphers: Cipher[]
+  ciphers: Cipher[],
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<number> {
   if (!session.symEncKey || !session.symMacKey || !Array.isArray(ciphers) || ciphers.length === 0) {
     return 0;
@@ -1053,19 +1054,26 @@ export async function repairCipherUriChecksums(
 
   for (const cipher of ciphers) {
     if (!cipher?.id || cipher.type !== 1 || !cipher.login || !Array.isArray(cipher.login.uris)) continue;
-    // Never auto-repair org ciphers with the personal key: this phase has no org-key write
-    // path, and a keyless org login would silently fall back to the personal key here,
-    // corrupting the shared cipher for the whole org.
-    if (cipher.organizationId) continue;
+    // Org ciphers use the org key (resolved below). If the org key isn't available,
+    // resolveCipherBaseKey throws OrgKeyUnavailableError and we SKIP this cipher (fail
+    // closed) -- never fall back to the personal key, which would corrupt the shared
+    // cipher for the whole org.
+    let base: { enc: Uint8Array; mac: Uint8Array };
+    try {
+      base = resolveCipherBaseKey(cipher, userEnc, userMac, orgKeys);
+    } catch (err) {
+      if (err instanceof OrgKeyUnavailableError) continue;
+      throw err;
+    }
     let keys: { enc: Uint8Array; mac: Uint8Array; key: string | null } = {
-      enc: userEnc,
-      mac: userMac,
+      enc: base.enc,
+      mac: base.mac,
       key: null,
     };
     if (looksLikeCipherString(cipher.key)) {
       let itemKey: Uint8Array;
       try {
-        itemKey = await decryptBw(String(cipher.key).trim(), userEnc, userMac);
+        itemKey = await decryptBw(String(cipher.key).trim(), base.enc, base.mac);
       } catch {
         continue;
       }
@@ -1238,15 +1246,27 @@ function hasUnresolvedEncryptedFields(cipher: Cipher): boolean {
 async function hasItemKeyFieldMismatch(
   cipher: Cipher,
   userEnc: Uint8Array,
-  userMac: Uint8Array
+  userMac: Uint8Array,
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<boolean> {
   if (!looksLikeCipherString(cipher.key)) return false;
   const probes = getCipherKeyMismatchProbes(cipher);
   if (probes.length === 0) return false;
 
+  // Org ciphers use the org key (resolved below). If the org key isn't available, treat
+  // this as "no mismatch" -- skip (fail closed) rather than flagging/repairing with the
+  // personal key, which would corrupt the shared cipher for the whole org.
+  let base: { enc: Uint8Array; mac: Uint8Array };
+  try {
+    base = resolveCipherBaseKey(cipher, userEnc, userMac, orgKeys);
+  } catch (err) {
+    if (err instanceof OrgKeyUnavailableError) return false;
+    throw err;
+  }
+
   let itemKey: Uint8Array;
   try {
-    itemKey = await decryptBw(String(cipher.key).trim(), userEnc, userMac);
+    itemKey = await decryptBw(String(cipher.key).trim(), base.enc, base.mac);
   } catch {
     return false;
   }
@@ -1259,11 +1279,11 @@ async function hasItemKeyFieldMismatch(
       await decryptStr(probe, itemEnc, itemMac);
       continue;
     } catch {
-      // Try the legacy user-key field path below.
+      // Try the legacy base-key field path below.
     }
 
     try {
-      await decryptStr(probe, userEnc, userMac);
+      await decryptStr(probe, base.enc, base.mac);
       return true;
     } catch {
       // Keep scanning in case another field reveals a repairable mismatch.
@@ -1276,7 +1296,8 @@ async function hasItemKeyFieldMismatch(
 export async function repairCipherKeyMismatches(
   authedFetch: AuthedFetch,
   session: SessionState,
-  ciphers: Cipher[]
+  ciphers: Cipher[],
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<number> {
   if (!session.symEncKey || !session.symMacKey || !Array.isArray(ciphers) || ciphers.length === 0) {
     return 0;
@@ -1288,16 +1309,14 @@ export async function repairCipherKeyMismatches(
 
   for (const cipher of ciphers) {
     if (!cipher?.id || !looksLikeCipherString(cipher.key)) continue;
-    // Same org-cipher exclusion as repairCipherUriChecksums: this repair path must never
-    // rewrite an org cipher with the personal key, even if it happens to look "safe" today.
-    if (cipher.organizationId) continue;
-    if (!(await hasItemKeyFieldMismatch(cipher, userEnc, userMac))) continue;
+    if (!(await hasItemKeyFieldMismatch(cipher, userEnc, userMac, orgKeys))) continue;
     if (hasUnresolvedEncryptedFields(cipher)) continue;
     await updateCipher(
       authedFetch,
       session,
       cipher,
       draftFromDecryptedCipher(cipher),
+      orgKeys,
       { preserveRevisionDate: true },
       { webRepair: true }
     );
