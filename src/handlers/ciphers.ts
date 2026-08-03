@@ -12,6 +12,7 @@ import {
   CipherPassport,
   Attachment,
   PasswordHistory,
+  OrganizationUser,
 } from '../types';
 import { StorageService } from '../services/storage';
 import { canReadCipher, canWriteCipher } from '../services/org-access';
@@ -962,6 +963,56 @@ async function verifyFolderOwnership(storage: StorageService, folderId: string |
   return !!folder;
 }
 
+// SECURITY (Task 1 review finding, reused by Task 6's share endpoint): any
+// handler that lets a client attach an org cipher to a set of collections
+// must validate, before persisting anything, that (a) the requester is a
+// CONFIRMED member of the target org, and (b) for every target collection:
+// it actually belongs to that org, and the requester can write to it (org
+// owners can write everywhere -- sole-admin model; non-owner members need a
+// non-read-only grant on every target collection). A stranger to org Y must
+// never be able to make org-Y-owned data, and a member must never be able to
+// smuggle a cipher into a collection they can't write (or one from a
+// different org entirely). Single-sourced here so handleCreateCipher and
+// handleShareCipher can't drift out of sync on this logic.
+async function requireOrgCipherWriteAccess(
+  storage: StorageService,
+  userId: string,
+  organizationId: string,
+  collectionIds: string[]
+): Promise<{ orgUser: OrganizationUser } | { errorResponse: Response }> {
+  const orgUser = await storage.getOrgUserByOrgAndUser(organizationId, userId);
+  if (!orgUser || orgUser.status !== 'confirmed') {
+    return { errorResponse: errorResponse('Cipher not found', 404) };
+  }
+
+  if (collectionIds.length > 0) {
+    const collections = await Promise.all(
+      collectionIds.map((cid) => storage.getCollection(cid))
+    );
+    for (const collection of collections) {
+      if (!collection || collection.orgId !== organizationId) {
+        return { errorResponse: errorResponse('Invalid collection', 400) };
+      }
+    }
+
+    // Owners always have write access to every collection in their org
+    // (sole-admin model). Non-owner members need a non-read-only grant on
+    // every target collection.
+    if (orgUser.role !== 'owner') {
+      const memberCollections = await storage.listCollectionsForMember(orgUser.id);
+      const writableCollectionIds = new Set(
+        memberCollections.filter((entry) => !entry.readOnly).map((entry) => entry.collection.id)
+      );
+      const canWriteAllTargets = collectionIds.every((cid) => writableCollectionIds.has(cid));
+      if (!canWriteAllTargets) {
+        return { errorResponse: errorResponse('Insufficient collection permissions', 403) };
+      }
+    }
+  }
+
+  return { orgUser };
+}
+
 // POST /api/ciphers
 export async function handleCreateCipher(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
@@ -1050,10 +1101,8 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   // write access to every target collection before persisting. A stranger
   // to org Y must never be able to make org-Y-owned data.
   if (requestedOrganizationId) {
-    const orgUser = await storage.getOrgUserByOrgAndUser(requestedOrganizationId, userId);
-    if (!orgUser || orgUser.status !== 'confirmed') {
-      return errorResponse('Cipher not found', 404);
-    }
+    const access = await requireOrgCipherWriteAccess(storage, userId, requestedOrganizationId, requestedCollectionIds);
+    if ('errorResponse' in access) return access.errorResponse;
 
     // A non-owner member with no target collection would create an org
     // cipher it immediately can't read or write itself (canRead/canWriteCipher
@@ -1061,33 +1110,8 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     // ever reach it again. Require at least one target collection for
     // non-owner creators; owners may create unassigned (owner-bypass gives
     // them access regardless of collections).
-    if (orgUser.role !== 'owner' && requestedCollectionIds.length === 0) {
+    if (access.orgUser.role !== 'owner' && requestedCollectionIds.length === 0) {
       return errorResponse('An organization member must assign the item to at least one collection', 400);
-    }
-
-    if (requestedCollectionIds.length > 0) {
-      const collections = await Promise.all(
-        requestedCollectionIds.map((cid) => storage.getCollection(cid))
-      );
-      for (const collection of collections) {
-        if (!collection || collection.orgId !== requestedOrganizationId) {
-          return errorResponse('Invalid collection', 400);
-        }
-      }
-
-      // Owners always have write access to every collection in their org
-      // (sole-admin model). Non-owner members need a non-read-only grant on
-      // every target collection.
-      if (orgUser.role !== 'owner') {
-        const memberCollections = await storage.listCollectionsForMember(orgUser.id);
-        const writableCollectionIds = new Set(
-          memberCollections.filter((entry) => !entry.readOnly).map((entry) => entry.collection.id)
-        );
-        const canWriteAllTargets = requestedCollectionIds.every((cid) => writableCollectionIds.has(cid));
-        if (!canWriteAllTargets) {
-          return errorResponse('Insufficient collection permissions', 403);
-        }
-      }
     }
 
     cipher.collectionIds = requestedCollectionIds;
@@ -1232,6 +1256,160 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
 
   return jsonResponse(
     cipherToResponse(cipher, attachments, responseOptions)
+  );
+}
+
+// POST /api/ciphers/:id/share
+// Bitwarden's share payload: { cipher: { ...fields, organizationId }, collectionIds: [...] }.
+// Moves a cipher the requester can currently write (typically their own personal
+// cipher) into an org, persisting the client's re-encrypted-under-the-org-key
+// cipher data and assigning it to the given collections. Ownership (user_id, the
+// original creator) is never changed by a share -- only organizationId and
+// collection membership move.
+export async function handleShareCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const existingCipher = await storage.getCipher(id);
+
+  // The requester must be able to write the cipher AS IT STANDS TODAY. For the
+  // common case (a personal cipher, organizationId === null) canWriteCipher
+  // reduces to "you are the owner" -- you can only share what you own.
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
+    return errorResponse('Cipher not found', 404);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  // Android sends PascalCase "Cipher"/"CollectionIds" for org payloads, matching
+  // the alias convention already used throughout this file.
+  const cipherData = body.Cipher || body.cipher || {};
+  const shareCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const requestedCollectionIds = Array.isArray(shareCollectionIds.value)
+    ? Array.from(new Set(shareCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
+    : [];
+
+  const shareOrganizationId = readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']);
+  const targetOrganizationId = normalizeOptionalId(
+    shareOrganizationId.present ? shareOrganizationId.value : null
+  );
+  // Sharing REQUIRES a target org -- this endpoint's entire purpose is moving
+  // a cipher into one.
+  if (!targetOrganizationId) {
+    return errorResponse('An organization is required to share a cipher.', 400);
+  }
+
+  // An org cipher with no collections would be unreachable to anyone but the
+  // org owner (same invariant Task 3's create-time validation enforces) --
+  // require at least one target collection for every share, regardless of role.
+  if (!requestedCollectionIds.length) {
+    return errorResponse('Invalid collection', 400);
+  }
+
+  // Same chokepoint handleCreateCipher uses for org-cipher validation:
+  // confirmed membership + every collection belongs to the target org + the
+  // requester can write to each one.
+  const access = await requireOrgCipherWriteAccess(storage, userId, targetOrganizationId, requestedCollectionIds);
+  if ('errorResponse' in access) return access.errorResponse;
+
+  const incomingKey = readCipherProp<string | null>(cipherData, ['key', 'Key']);
+  if (incomingKey.present && !shouldAcceptCipherKey(incomingKey.value)) {
+    return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
+  }
+
+  const incomingFolderId = readCipherProp<string | null>(cipherData, ['folderId', 'FolderId']);
+  const incomingLogin = readCipherProp<CipherLogin | null>(cipherData, ['login', 'Login']);
+  const incomingCard = readCipherProp<CipherCard | null>(cipherData, ['card', 'Card']);
+  const incomingIdentity = readCipherProp<CipherIdentity | null>(cipherData, ['identity', 'Identity']);
+  const incomingSecureNote = readCipherProp<CipherSecureNote | null>(cipherData, ['secureNote', 'SecureNote']);
+  const incomingSshKey = readCipherProp<CipherSshKey | null>(cipherData, ['sshKey', 'SshKey']);
+  const incomingBankAccount = readCipherProp<CipherBankAccount | null>(cipherData, ['bankAccount', 'BankAccount']);
+  const incomingDriversLicense = readCipherProp<CipherDriversLicense | null>(cipherData, ['driversLicense', 'DriversLicense']);
+  const incomingPassport = readCipherProp<CipherPassport | null>(cipherData, ['passport', 'Passport']);
+  const incomingPasswordHistory = readCipherProp<PasswordHistory[] | null>(cipherData, ['passwordHistory', 'PasswordHistory']);
+  const nextType = Number(cipherData.type) || existingCipher.type;
+
+  // Opaque passthrough merge (same shape as handleUpdateCipher): start from the
+  // existing stored cipher, overlay the client's re-encrypted fields, then force
+  // the server-controlled fields -- most importantly organizationId (the whole
+  // point of this endpoint) and userId (ownership invariant: sharing never
+  // changes who created the cipher).
+  const cipher: Cipher = {
+    ...existingCipher,
+    ...cipherData,
+    id: existingCipher.id,
+    userId: existingCipher.userId,
+    organizationId: targetOrganizationId,
+    type: nextType,
+    favorite: cipherData.favorite ?? existingCipher.favorite,
+    reprompt: cipherData.reprompt ?? existingCipher.reprompt,
+    createdAt: existingCipher.createdAt,
+    updatedAt: new Date().toISOString(),
+    archivedAt: existingCipher.archivedAt ?? null,
+    deletedAt: existingCipher.deletedAt,
+  };
+  if (incomingFolderId.present) {
+    cipher.folderId = normalizeOptionalId(incomingFolderId.value);
+  }
+  if (incomingKey.present) {
+    const normalizedIncomingKey = normalizeCipherKeyForStorage(incomingKey.value);
+    cipher.key = normalizedIncomingKey || normalizeCipherKeyForStorage(existingCipher.key);
+  } else {
+    cipher.key = normalizeCipherKeyForStorage(existingCipher.key);
+  }
+  cipher.login = nextType === 1 ? (incomingLogin.present ? (incomingLogin.value ?? null) : (existingCipher.login ?? null)) : null;
+  cipher.secureNote = nextType === 2 ? (incomingSecureNote.present ? (incomingSecureNote.value ?? null) : (existingCipher.secureNote ?? null)) : null;
+  cipher.card = nextType === 3 ? (incomingCard.present ? (incomingCard.value ?? null) : (existingCipher.card ?? null)) : null;
+  cipher.identity = nextType === 4 ? (incomingIdentity.present ? (incomingIdentity.value ?? null) : (existingCipher.identity ?? null)) : null;
+  cipher.sshKey = nextType === 5 ? (incomingSshKey.present ? (incomingSshKey.value ?? null) : (existingCipher.sshKey ?? null)) : null;
+  cipher.bankAccount = nextType === 6 ? (incomingBankAccount.present ? (incomingBankAccount.value ?? null) : ((existingCipher as any).bankAccount ?? null)) : null;
+  cipher.driversLicense = nextType === 7 ? (incomingDriversLicense.present ? (incomingDriversLicense.value ?? null) : ((existingCipher as any).driversLicense ?? null)) : null;
+  cipher.passport = nextType === 8 ? (incomingPassport.present ? (incomingPassport.value ?? null) : ((existingCipher as any).passport ?? null)) : null;
+  if (incomingPasswordHistory.present) {
+    cipher.passwordHistory = incomingPasswordHistory.value ?? null;
+  }
+
+  const incomingFields = getAliasedProp(cipherData, ['fields', 'Fields']);
+  if (incomingFields.present) {
+    cipher.fields = incomingFields.value ?? null;
+  }
+
+  cipher.collectionIds = requestedCollectionIds;
+  normalizeCipherForStorage(cipher);
+  const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
+  if (compatibilityError) return errorResponse(compatibilityError, 400);
+
+  // Prevent referencing a folder owned by another user.
+  if (cipher.folderId) {
+    const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
+    if (!folderOk) return errorResponse('Folder not found', 404);
+  }
+
+  await storage.saveCipher(cipher);
+  // Org attachments follow automatically -- they FK to cipher_id, not
+  // organization_id, so no attachment-specific migration is needed here.
+  await storage.addCipherToCollections(cipher.id, requestedCollectionIds);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  // Every confirmed member of the target org (not just the acting user) needs
+  // their sync revision bumped and pushed, or their client won't see the
+  // newly-shared item.
+  await notifyOrgCipherChange(env, storage, [targetOrganizationId], readActingDeviceIdentifier(request));
+
+  await writeCipherAudit(storage, request, userId, 'cipher.share', {
+    id: cipher.id,
+    organizationId: targetOrganizationId,
+    collectionIds: requestedCollectionIds,
+  });
+
+  const attachments = await storage.getAttachmentsByCipher(cipher.id);
+  return jsonResponse(
+    cipherToResponse(cipher, attachments, cipherResponseOptionsForRequest(request))
   );
 }
 
