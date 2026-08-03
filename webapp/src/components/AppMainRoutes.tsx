@@ -9,7 +9,7 @@ import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload } from '@/lib/api/vault';
 import type { CreateOrganizationInput } from '@/lib/api/organizations';
 import { t } from '@/lib/i18n';
-import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
+import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, Collection, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
 import type { ExportRequest } from '@/lib/export-formats';
 
 const VaultPage = lazy(() => import('@/components/VaultPage'));
@@ -50,6 +50,8 @@ export interface AppMainRoutesProps {
   decryptedCiphers: Cipher[];
   decryptedFolders: VaultFolder[];
   decryptedSends: Send[];
+  /** Decrypted org collections (Phase 4a read path); not yet consumed by any route — 4b wires this in. */
+  decryptedCollections?: Collection[];
   vaultError: string;
   ciphersLoading: boolean;
   foldersLoading: boolean;

@@ -4,7 +4,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { WebCryptoUnavailableError } from '@/lib/crypto';
 import { generateOrgKeys } from '@/lib/org-crypto';
 import { t } from '@/lib/i18n';
-import type { CreateOrganizationInput, ProfileOrganization } from '@/lib/api/organizations';
+import { getProfileOrganizations, type CreateOrganizationInput } from '@/lib/api/organizations';
 import type { Profile } from '@/lib/types';
 
 // Owner/member role, mirroring the server's organization_users.role (0 = owner).
@@ -14,11 +14,6 @@ interface OrganizationsPageProps {
   profile: Profile;
   onCreateOrganization: (input: CreateOrganizationInput) => Promise<{ id: string }>;
   onNotify?: (type: 'success' | 'error' | 'warning', text: string) => void;
-}
-
-function getProfileOrganizations(profile: Profile): ProfileOrganization[] {
-  const raw = (profile as { organizations?: unknown }).organizations;
-  return Array.isArray(raw) ? (raw as ProfileOrganization[]) : [];
 }
 
 function organizationRoleLabel(type: number): string {
