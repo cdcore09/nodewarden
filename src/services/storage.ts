@@ -96,6 +96,7 @@ import {
   deleteCipher as deleteStoredCipher,
   deleteOrgCiphers as deleteStoredOrgCiphers,
   getOrgCipherIds as listStoredOrgCipherIds,
+  countOrgCiphersByCreator as countStoredOrgCiphersByCreator,
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
@@ -576,6 +577,10 @@ export class StorageService {
 
   async getCiphersPage(userId: string, includeDeleted: boolean, limit: number, offset: number): Promise<Cipher[]> {
     return listStoredCiphersPage(this.db, userId, includeDeleted, limit, offset);
+  }
+
+  async countOrgCiphersByCreator(userId: string): Promise<number> {
+    return countStoredOrgCiphersByCreator(this.db, userId);
   }
 
   async getCiphersByIds(ids: string[], userId: string): Promise<Cipher[]> {

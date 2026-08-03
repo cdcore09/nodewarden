@@ -58,6 +58,8 @@ const CIPHER_SCALAR_DATA_KEYS = new Set([
   'deletedAt',
   'deleted_at',
   'deletedDate',
+  'collectionIds',
+  'CollectionIds',
 ]);
 
 function buildCipherData(cipher: Cipher, folderId: string | null): string {
@@ -286,6 +288,18 @@ export async function getAllCiphers(db: D1Database, userId: string): Promise<Cip
   });
 }
 
+// Used to block deleting a user who has created org ciphers: ciphers.user_id
+// is ON DELETE CASCADE, so deleting the user would silently destroy any
+// shared org ciphers (and their blobs) they created, for every remaining
+// org member — not just ciphers they own personally.
+export async function countOrgCiphersByCreator(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS count FROM ciphers WHERE user_id = ? AND organization_id IS NOT NULL')
+    .bind(userId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
 // Every cipher belonging to an org, for an org OWNER — owners implicitly see
 // everything regardless of collection grants.
 export async function getOrgCiphersForOwner(db: D1Database, orgId: string): Promise<Cipher[]> {
@@ -376,7 +390,7 @@ export async function getCiphersPage(
   const res = await db
     .prepare(
       `SELECT ${selectCipherColumns()} FROM ciphers
-       WHERE user_id = ?
+       WHERE user_id = ? AND organization_id IS NULL
        ${whereDeleted}
        ORDER BY updated_at DESC
        LIMIT ? OFFSET ?`

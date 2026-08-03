@@ -84,6 +84,20 @@ test('getAllCiphers excludes org ciphers and includes only the user\'s personal 
   assert.deepEqual(ciphers.map((c) => c.id).sort(), ['personal-1']);
 });
 
+test('getCiphersPage excludes org ciphers and includes only the user\'s personal ciphers', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'owner1', 'owner@x.y');
+  const storage = new StorageService(db as any);
+
+  await storage.createOrganizationWithOwner(org('o1'), orgUser('ou-owner', 'o1', 'owner1', 'owner@x.y', 'owner', 'confirmed'));
+
+  await storage.saveCipher(makeCipher('personal-1', 'owner1', null));
+  await storage.saveCipher(makeCipher('org-cipher-1', 'owner1', 'o1'));
+
+  const ciphers = await storage.getCiphersPage('owner1', false, 50, 0);
+  assert.deepEqual(ciphers.map((c) => c.id).sort(), ['personal-1']);
+});
+
 test('getAccessibleOrgCiphers: owner sees every cipher in their org; member sees only granted-collection ciphers', async () => {
   const db = createTestDb();
   await seedUser(db, 'owner1', 'owner@x.y');
@@ -186,6 +200,20 @@ test('getAccessibleOrgCiphers dedupes a cipher reachable via multiple granted co
   const memberCiphers = await storage.getAccessibleOrgCiphers('member1');
   assert.equal(memberCiphers.length, 1);
   assert.deepEqual((memberCiphers[0] as any).collectionIds.sort(), ['collA', 'collB']);
+});
+
+test('countOrgCiphersByCreator: 0 for a user with only personal ciphers, 1 after they create an org cipher', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'owner1', 'owner@x.y');
+  const storage = new StorageService(db as any);
+
+  await storage.createOrganizationWithOwner(org('o1'), orgUser('ou-owner', 'o1', 'owner1', 'owner@x.y', 'owner', 'confirmed'));
+
+  await storage.saveCipher(makeCipher('personal-1', 'owner1', null));
+  assert.equal(await storage.countOrgCiphersByCreator('owner1'), 0);
+
+  await storage.saveCipher(makeCipher('org-cipher-1', 'owner1', 'o1'));
+  assert.equal(await storage.countOrgCiphersByCreator('owner1'), 1);
 });
 
 test('getAccessibleOrgCiphers: a stale cipher_collections row from a former org does not leak the cipher across tenants', async () => {

@@ -46,7 +46,9 @@ test('saveCipher + getCipher round-trips a non-null organizationId', async () =>
   await seedUser(db, 'u1', 'me@x.y');
   const storage = new StorageService(db);
 
-  await storage.saveCipher(makeCipher('c1', 'u1', 'org-1'));
+  const cipher = makeCipher('c1', 'u1', 'org-1');
+  (cipher as any).collectionIds = ['collA', 'collB'];
+  await storage.saveCipher(cipher);
   const fetched = await storage.getCipher('c1');
 
   assert.equal(fetched?.organizationId, 'org-1');
@@ -62,6 +64,12 @@ test('saveCipher + getCipher round-trips a non-null organizationId', async () =>
   // column stays authoritative and the two never disagree.
   const parsedData = JSON.parse(raw?.data ?? '{}');
   assert.equal('organizationId' in parsedData, false, 'organizationId must not be duplicated in the data blob');
+
+  // Guard against the same blob/column drift class for collectionIds: it's
+  // derived from cipher_collections at read time (getCollectionIdsForCiphers),
+  // so a stale snapshot in the JSON blob would go stale if a collection is
+  // later deleted. It must not be persisted into the data blob either.
+  assert.equal('collectionIds' in parsedData, false, 'collectionIds must not be duplicated in the data blob');
 });
 
 test('saveCipher + getCipher round-trips a personal cipher as null, not undefined', async () => {
