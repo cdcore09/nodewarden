@@ -1357,6 +1357,56 @@ export async function handlePartialUpdateCipher(request: Request, env: Env, user
   );
 }
 
+// Bulk cipher endpoints take a flat id list from the client, but the
+// per-id chokepoint is canWriteCipher(storage, userId, cipher) -- and it
+// needs an actual Cipher, not just an id. storage.getCiphersByIds(ids, userId)
+// can't be used to load them: it's personal-vault scoped (`WHERE user_id = ?`)
+// and will never return an org cipher the caller only has access to via a
+// collection grant. Load each id individually via storage.getCipher(id)
+// (unscoped by owner) instead, then gate it. Ids that don't exist, or that
+// the caller can't write to, are silently dropped from the batch rather than
+// failing the whole request -- this matches Bitwarden's bulk endpoint
+// semantics of "apply to whatever subset you're allowed to touch."
+async function loadAuthorizedCiphersForBulkWrite(
+  storage: StorageService,
+  userId: string,
+  ids: string[]
+): Promise<Cipher[]> {
+  const loaded = await Promise.all(ids.map((id) => storage.getCipher(id)));
+  const authorized: Cipher[] = [];
+  for (const cipher of loaded) {
+    if (cipher && (await canWriteCipher(storage, userId, cipher))) {
+      authorized.push(cipher);
+    }
+  }
+  return authorized;
+}
+
+// The underlying bulk storage mutations (bulkSoftDeleteCiphers,
+// bulkArchiveCiphers, bulkMoveCiphers, ...) filter `WHERE user_id = ? AND id
+// IN (...)`, scoped to whichever userId is passed in -- not to the acting
+// caller. For a personal cipher the owner and the acting caller are the same
+// person, so this is a no-op distinction. But for an org cipher created by a
+// teammate, cipher.userId (the creator) differs from the acting userId (an
+// owner/writer acting via a collection grant); calling the bulk mutation
+// scoped to the ACTING userId would match zero rows and silently no-op on
+// exactly the ciphers this task exists to fix. Group the authorized ciphers
+// by their owning user id and issue one bulk call per owner group instead,
+// so each group's storage call is scoped to the id that actually owns those
+// rows and the mutation lands.
+function groupCipherIdsByOwner(ciphers: Cipher[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const cipher of ciphers) {
+    const list = grouped.get(cipher.userId);
+    if (list) {
+      list.push(cipher.id);
+    } else {
+      grouped.set(cipher.userId, [cipher.id]);
+    }
+  }
+  return grouped;
+}
+
 // POST/PUT /api/ciphers/move - Bulk move to folder
 export async function handleBulkMoveCiphers(request: Request, env: Env, userId: string): Promise<Response> {
   const storage = new StorageService(env.DB);
@@ -1378,10 +1428,22 @@ export async function handleBulkMoveCiphers(request: Request, env: Env, userId: 
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
-  const revisionDate = await storage.bulkMoveCiphers(body.ids, folderId, userId);
-  if (revisionDate) {
-    notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  const ids = Array.from(new Set(body.ids.map((id) => String(id || '').trim()).filter(Boolean)));
+  // Folder assignment is inherently personal: a folder belongs to a single
+  // user (verified above), and org ciphers accessed via a collection grant
+  // can still be filed into the acting user's own folders. Gate on write
+  // access (see loadAuthorizedCiphersForBulkWrite for the skip behavior);
+  // org/collection assignment itself is out of scope here (see Task 6).
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (!authorizedCiphers.length) {
+    return new Response(null, { status: 204 });
   }
+
+  for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+    await storage.bulkMoveCiphers(ownerCipherIds, folderId, ownerId);
+  }
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
 
   return new Response(null, { status: 204 });
 }
@@ -1392,7 +1454,19 @@ async function buildCipherListResponse(
   userId: string,
   ids: string[]
 ): Promise<Response> {
-  const ciphers = await storage.getCiphersByIds(ids, userId);
+  // storage.getCiphersByIds is personal-scoped (WHERE user_id = ?) and would
+  // silently drop org ciphers the caller can only reach via a collection
+  // grant/owner-bypass -- exactly the ciphers a bulk archive/unarchive call
+  // may have just touched. Resolve each id individually via storage.getCipher
+  // and gate through canReadCipher instead, so those ciphers round-trip in
+  // the response.
+  const loaded = await Promise.all(ids.map((id) => storage.getCipher(id)));
+  const ciphers: Cipher[] = [];
+  for (const cipher of loaded) {
+    if (cipher && (await canReadCipher(storage, userId, cipher))) {
+      ciphers.push(cipher);
+    }
+  }
   const attachmentsByCipher = await storage.getAttachmentsByCipherIds(ciphers.map((cipher) => cipher.id));
 
   return jsonResponse({
@@ -1473,8 +1547,14 @@ export async function handleBulkArchiveCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkArchiveCiphers(ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkArchiveCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
   }
@@ -1498,8 +1578,14 @@ export async function handleBulkUnarchiveCiphers(request: Request, env: Env, use
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkUnarchiveCiphers(ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkUnarchiveCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
   }
@@ -1522,12 +1608,19 @@ export async function handleBulkDeleteCiphers(request: Request, env: Env, userId
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkSoftDeleteCiphers(body.ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, body.ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkSoftDeleteCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
     await writeCipherAudit(storage, request, userId, 'cipher.delete.soft.bulk', {
-      count: body.ids.length,
+      count: authorizedCiphers.length,
+      requestedCount: body.ids.length,
     });
   }
 
@@ -1549,8 +1642,14 @@ export async function handleBulkRestoreCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkRestoreCiphers(body.ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, body.ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkRestoreCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
   }
@@ -1578,23 +1677,26 @@ export async function handleBulkPermanentDeleteCiphers(request: Request, env: En
     return new Response(null, { status: 204 });
   }
 
-  const ownedCiphers = await storage.getCiphersByIds(ids, userId);
-  const ownedIds = ownedCiphers.map((cipher) => cipher.id);
-  if (!ownedIds.length) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  const authorizedIds = authorizedCiphers.map((cipher) => cipher.id);
+  if (!authorizedIds.length) {
     return new Response(null, { status: 204 });
   }
 
-  await deleteAllAttachmentsForCiphers(env, ownedIds);
+  await deleteAllAttachmentsForCiphers(env, authorizedIds);
 
-  const revisionDate = await storage.bulkDeleteCiphers(ownedIds, userId);
-  if (revisionDate) {
-    notifyVaultSyncForRequest(request, env, userId, revisionDate);
-    notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
-    await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent.bulk', {
-      count: ownedIds.length,
-      requestedCount: ids.length,
-    });
+  for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+    await storage.bulkDeleteCiphers(ownerCipherIds, ownerId);
   }
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent.bulk', {
+    count: authorizedIds.length,
+    requestedCount: ids.length,
+  });
 
   return new Response(null, { status: 204 });
 }
