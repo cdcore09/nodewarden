@@ -74,6 +74,7 @@ import {
   listGrantsForCollection as listStoredGrantsForCollection,
   listCollectionsForMember as listStoredCollectionsForMember,
   addCipherToCollections as addStoredCipherToCollections,
+  setCipherCollections as setStoredCipherCollections,
   getCipherCollectionIds as getStoredCipherCollectionIds,
   isCipherInGrantedCollection as isStoredCipherInGrantedCollection,
 } from './storage-collection-repo';
@@ -769,6 +770,10 @@ export class StorageService {
 
   async addCipherToCollections(cipherId: string, collectionIds: string[]): Promise<void> {
     return addStoredCipherToCollections(this.db, cipherId, collectionIds);
+  }
+
+  async setCipherCollections(cipherId: string, collectionIds: string[]): Promise<void> {
+    return setStoredCipherCollections(this.db, cipherId, collectionIds);
   }
 
   async getCipherCollectionIds(cipherId: string): Promise<string[]> {

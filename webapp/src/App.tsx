@@ -1424,14 +1424,14 @@ export default function App() {
         const repairKey = `${session.accessToken}:${encryptedCiphers.map((cipher) => `${cipher.id}:${cipher.revisionDate || ''}`).join(',')}`;
         if (uriChecksumRepairAttemptRef.current !== repairKey) {
           uriChecksumRepairAttemptRef.current = repairKey;
-          void repairCipherKeyMismatches(authedFetch, session, result.ciphers)
+          void repairCipherKeyMismatches(authedFetch, session, result.ciphers, orgKeysCache)
             .then(async (keyMismatchCount) => {
               if (keyMismatchCount > 0) {
                 await invalidateVaultCoreSyncSnapshot(vaultCacheKey);
                 void refetchVaultCoreData();
                 return;
               }
-              const uriChecksumCount = await repairCipherUriChecksums(authedFetch, session, result.ciphers);
+              const uriChecksumCount = await repairCipherUriChecksums(authedFetch, session, result.ciphers, orgKeysCache);
               if (uriChecksumCount > 0) {
                 await invalidateVaultCoreSyncSnapshot(vaultCacheKey);
                 void refetchVaultCoreData();
@@ -1953,6 +1953,7 @@ export default function App() {
     patchDecryptedFolders: setDecryptedFolders,
     patchDecryptedSends: setDecryptedSends,
     refreshVaultRevisionStamp: refreshVaultCoreRevisionStamp,
+    orgKeys: orgKeysCache,
   });
   const accountSecurityActions = useAccountSecurityActions({
     authedFetch,

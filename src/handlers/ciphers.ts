@@ -1212,7 +1212,13 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
     archivedAt: readCipherArchivedAt(cipherData, existingCipher.archivedAt ?? null),
     deletedAt: existingCipher.deletedAt,
   };
-  if (incomingFolderId.present) {
+  if (cipher.organizationId) {
+    // Org ciphers have no personal-folder concept (one folder_id column tied
+    // to the creator's user_id can't be shared coherently across members).
+    // Never carry the creator's personal folder onto an org cipher -- org
+    // ciphers use collections for organization instead.
+    cipher.folderId = null;
+  } else if (incomingFolderId.present) {
     cipher.folderId = normalizeOptionalId(incomingFolderId.value);
   }
   if (incomingKey.present) {
@@ -1247,8 +1253,12 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
 
-  // Prevent referencing a folder owned by another user.
-  if (cipher.folderId) {
+  // Prevent referencing a folder owned by another user. Org ciphers never
+  // carry a folderId (forced null above) and skip this personal-folder
+  // ownership check entirely -- otherwise it would spuriously 404 a
+  // non-creator org writer, since verifyFolderOwnership only recognizes the
+  // ORIGINAL CREATOR's personal folder, not the acting org member's.
+  if (!cipher.organizationId && cipher.folderId) {
     const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
@@ -1434,6 +1444,59 @@ export async function handleShareCipher(request: Request, env: Env, userId: stri
   return jsonResponse(
     cipherToResponse(cipher, attachments, cipherResponseOptionsForRequest(request))
   );
+}
+
+// PUT /api/ciphers/:id/collections
+// Replace the set of collections an EXISTING org cipher belongs to. Unlike
+// /share (personal -> org move), the cipher already belongs to an org here and
+// its organizationId never changes; only cipher_collections membership is
+// rewritten (replace-semantics, so stale rows are removed).
+export async function handleUpdateCipherCollections(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const existingCipher = await storage.getCipher(id);
+
+  // Must be able to write the cipher as it stands today (owner or non-read-only grant).
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
+    return errorResponse('Cipher not found', 404);
+  }
+  // This endpoint only makes sense for org ciphers; a personal cipher has no collections.
+  if (!existingCipher.organizationId) {
+    return errorResponse('Cipher is not in an organization', 400);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const rawCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const requestedCollectionIds = Array.isArray(rawCollectionIds.value)
+    ? Array.from(new Set(rawCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
+    : [];
+
+  // Confirmed membership + every target collection belongs to THIS org + writer can write each.
+  const access = await requireOrgCipherWriteAccess(storage, userId, existingCipher.organizationId, requestedCollectionIds);
+  if ('errorResponse' in access) return access.errorResponse;
+
+  // Rewrite junction rows (replace-semantics) and keep the cipher's own
+  // collectionIds field (stored in its data blob) in sync so getCipher doesn't drift.
+  await storage.setCipherCollections(existingCipher.id, requestedCollectionIds);
+  const updatedCipher: Cipher = { ...existingCipher, collectionIds: requestedCollectionIds };
+  await storage.saveCipher(updatedCipher);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  await notifyOrgCipherChange(env, storage, [existingCipher.organizationId], readActingDeviceIdentifier(request));
+
+  await writeCipherAudit(storage, request, userId, 'cipher.collections', {
+    id: updatedCipher.id,
+    organizationId: existingCipher.organizationId,
+    collectionIds: requestedCollectionIds,
+  });
+
+  const attachments = await storage.getAttachmentsByCipher(updatedCipher.id);
+  return jsonResponse(cipherToResponse(updatedCipher, attachments, cipherResponseOptionsForRequest(request)));
 }
 
 // DELETE /api/ciphers/:id

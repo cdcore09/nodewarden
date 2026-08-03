@@ -235,3 +235,43 @@ test('StorageService.createCollection and listCollections round-trip', async () 
   assert.equal(list.length, 2);
   assert.deepEqual(list.map((c) => c.id), ['c1', 'c2']);
 });
+
+test('setCipherCollections replaces the membership set, removing stale rows', async () => {
+  const { StorageService } = await import('../src/services/storage');
+  const db = createTestDb();
+  const storage = new StorageService(db);
+  await seedUser(db, 'u1', 'a@b.c');
+  await storage.createOrganizationWithOwner(
+    { id: 'o1', name: '2.n|x', publicKey: 'pub', encryptedPrivateKey: '2.p', createdAt: now, updatedAt: now },
+    { id: 'ou1', orgId: 'o1', userId: 'u1', email: 'a@b.c', role: 'owner', status: 'confirmed', encryptedOrgKey: '4.k', createdAt: now, updatedAt: now }
+  );
+  await storage.createCollection({ id: 'cA', orgId: 'o1', name: '2.a|x', createdAt: now, updatedAt: now });
+  await storage.createCollection({ id: 'cB', orgId: 'o1', name: '2.b|x', createdAt: now, updatedAt: now });
+  await storage.createCollection({ id: 'cC', orgId: 'o1', name: '2.c|x', createdAt: now, updatedAt: now });
+  await seedCipher(db, 'cipher1', 'u1');
+
+  // seed initial membership {cA, cB} via the additive helper
+  await storage.addCipherToCollections('cipher1', ['cA', 'cB']);
+  assert.deepEqual((await storage.getCipherCollectionIds('cipher1')).sort(), ['cA', 'cB']);
+
+  // replace with {cB, cC} — cA must be removed, cC added, cB kept
+  await storage.setCipherCollections('cipher1', ['cB', 'cC']);
+  assert.deepEqual((await storage.getCipherCollectionIds('cipher1')).sort(), ['cB', 'cC']);
+
+  // replace with [] — all rows removed
+  await storage.setCipherCollections('cipher1', []);
+  assert.deepEqual(await storage.getCipherCollectionIds('cipher1'), []);
+});
+
+test('setCipherCollections dedupes and does not duplicate existing rows', async () => {
+  const { StorageService } = await import('../src/services/storage');
+  const db = createTestDb();
+  const storage = new StorageService(db);
+  await seedUser(db, 'u1', 'a@b.c');
+  await seedOrg(db, 'o1');
+  await seedCipher(db, 'cipherX', 'u1');
+  await createCollection(db, collection('cA', 'o1'));
+  await createCollection(db, collection('cB', 'o1'));
+  await storage.setCipherCollections('cipherX', ['cA', 'cA', 'cB']);
+  assert.deepEqual((await storage.getCipherCollectionIds('cipherX')).sort(), ['cA', 'cB']);
+});
