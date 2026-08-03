@@ -293,12 +293,21 @@ export async function handlePublicUploadAttachment(
   }
 
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(cipherId, claims.userId);
-  if (!cipher || cipher.userId !== claims.userId) {
+
+  // The upload token (validated above, and bound to this exact cipherId +
+  // attachmentId via the claims check) authenticates WHO is uploading —
+  // claims.userId. Authorization for WHETHER they may write to this cipher
+  // goes through the same chokepoint as the other write handlers: an org
+  // cipher may be owned by someone other than the confirmed writer who
+  // initiated the upload via handleCreateAttachment, so an ownership-equality
+  // check here would 404 a legitimate org upload.
+  const cipher = await storage.getCipher(cipherId);
+  if (!cipher || !(await canWriteCipher(storage, claims.userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
-  const attachment = await storage.getAttachmentForUser(attachmentId, claims.userId);
+  // Unscoped lookup — access to the parent cipher was already verified above.
+  const attachment = await storage.getAttachment(attachmentId);
   if (!attachment || attachment.cipherId !== cipherId) {
     return errorResponse('Attachment not found', 404);
   }
