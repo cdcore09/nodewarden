@@ -147,6 +147,24 @@ export async function removeOrgUser(authedFetch: AuthedFetch, orgId: string, org
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to remove member'));
 }
 
+export async function acceptOrgInvitation(
+  authedFetch: AuthedFetch,
+  orgId: string,
+  orgUserId: string,
+  token: string
+): Promise<void> {
+  const id = String(orgId || '').trim();
+  const userId = String(orgUserId || '').trim();
+  const inviteToken = String(token || '').trim();
+  if (!id || !userId || !inviteToken) throw new Error('Organization id, member id, and token are required');
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(id)}/users/${encodeURIComponent(userId)}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: inviteToken }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to accept the invitation'));
+}
+
 export async function getUserPublicKey(authedFetch: AuthedFetch, userId: string): Promise<string> {
   const id = String(userId || '').trim();
   if (!id) throw new Error('User id is required');

@@ -1543,7 +1543,13 @@ Object.assign(zhTW, {
   "txt_org_confirm_fingerprint_help": "Verify this phrase with the member through another channel before confirming. Confirming grants them access to the organization key.",
   "txt_org_member_confirmed": "Member confirmed",
   "txt_org_confirm_failed": "Failed to confirm member",
-  "txt_org_confirm_no_account": "This member has not accepted the invitation yet"
+  "txt_org_confirm_no_account": "This member has not accepted the invitation yet",
+  "txt_org_accept_title": "Organization invitation",
+  "txt_org_accept_message": "You have been invited to join an organization as {email}. Accept the invitation?",
+  "txt_org_accept_button": "Accept invitation",
+  "txt_org_accepting": "Accepting…",
+  "txt_org_accept_success": "Invitation accepted. The organization owner can now confirm your membership.",
+  "txt_org_accept_failed": "Failed to accept the invitation"
 });
 
 export default zhTW;
