@@ -25,6 +25,14 @@ export interface OrganizationCollectionSummary {
   name: string;
 }
 
+/** Read `profile.organizations[]` (the orgs this user belongs to, with their wrapped org key). */
+export function getProfileOrganizations(
+  profile: { organizations?: unknown; [key: string]: unknown } | null | undefined
+): ProfileOrganization[] {
+  const raw = profile?.organizations;
+  return Array.isArray(raw) ? (raw as ProfileOrganization[]) : [];
+}
+
 export async function createOrganization(
   authedFetch: AuthedFetch,
   input: CreateOrganizationInput

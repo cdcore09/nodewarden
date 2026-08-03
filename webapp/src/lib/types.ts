@@ -250,6 +250,10 @@ export interface Cipher {
   revisionDate?: string;
   deletedDate?: string | null;
   archivedDate?: string | null;
+  /** Set for org-shared ciphers (Phase 3b sync); null/undefined for personal ciphers. */
+  organizationId?: string | null;
+  /** Collections this org cipher belongs to; personal ciphers omit this. */
+  collectionIds?: string[] | null;
   attachments?: CipherAttachment[] | null;
   login?: CipherLogin | null;
   card?: CipherCard | null;
@@ -263,6 +267,15 @@ export interface Cipher {
   fields?: CipherField[] | null;
   decName?: string;
   decNotes?: string;
+}
+
+/** Org collection, as returned in sync's `collections[]` (name is org-key-encrypted). */
+export interface Collection {
+  id: string;
+  organizationId: string;
+  name: string;
+  decName?: string;
+  [key: string]: unknown;
 }
 
 export interface SendTextData {
