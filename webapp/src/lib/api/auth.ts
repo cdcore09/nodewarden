@@ -575,12 +575,37 @@ export function createAuthedFetch(getSession: () => SessionState | null, setSess
   };
 }
 
+/**
+ * The server's profile response does not include a top-level `publicKey` field.
+ * The account's RSA public key is nested at `accountKeys.publicKeyEncryptionKeyPair.publicKey`
+ * (see src/utils/user-decryption.ts `buildAccountKeys`). Extract it so callers that read
+ * `profile.publicKey` directly (e.g. org creation) see a populated value.
+ */
+export function extractAccountPublicKey(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+
+  const topLevel = record.publicKey;
+  if (typeof topLevel === 'string' && topLevel.trim()) return topLevel;
+
+  const accountKeys = record.accountKeys;
+  if (accountKeys && typeof accountKeys === 'object') {
+    const keyPair = (accountKeys as Record<string, unknown>).publicKeyEncryptionKeyPair;
+    if (keyPair && typeof keyPair === 'object') {
+      const nested = (keyPair as Record<string, unknown>).publicKey;
+      if (typeof nested === 'string' && nested.trim()) return nested;
+    }
+  }
+
+  return null;
+}
+
 export async function getProfile(authedFetch: AuthedFetch): Promise<Profile> {
   const resp = await authedFetch('/api/accounts/profile');
   if (!resp.ok) throw new Error('Failed to load profile');
   const body = await parseJson<Profile>(resp);
   if (!body) throw new Error('Invalid profile');
-  return body;
+  return { ...body, publicKey: extractAccountPublicKey(body) };
 }
 
 export async function updateProfile(
@@ -600,7 +625,7 @@ export async function updateProfile(
   }
   const body = await parseJson<Profile>(resp);
   if (!body) throw new Error('Invalid profile');
-  return body;
+  return { ...body, publicKey: extractAccountPublicKey(body) };
 }
 
 export async function unlockVaultKey(profileKey: string, masterKey: Uint8Array): Promise<{ symEncKey: string; symMacKey: string }> {

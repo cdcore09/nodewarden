@@ -6,7 +6,10 @@ const PORTABLE_ALGORITHM = 'RSA-OAEP';
 const PORTABLE_HASH = 'SHA-1';
 const AES_GCM_ALGORITHM = 'AES-GCM';
 
-async function importPortablePrivateKey(pkcs8: Uint8Array): Promise<CryptoKey> {
+// Exported for reuse by org-crypto.ts's getAccountRsaPrivateKey, which needs
+// the identical RSA-OAEP/SHA-1 pkcs8 import used here for portable backup
+// settings. Behavior is unchanged for existing callers in this file.
+export async function importPortablePrivateKey(pkcs8: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'pkcs8',
     toBufferSource(pkcs8),

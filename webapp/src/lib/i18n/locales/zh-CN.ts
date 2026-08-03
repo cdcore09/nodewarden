@@ -1494,4 +1494,20 @@ Object.assign(zhCN, {
   "txt_password_security_check_failed": "无法完成泄露检查。"
 });
 
+Object.assign(zhCN, {
+  "txt_org_page_title": "Organizations",
+  "txt_org_new_button": "New organization",
+  "txt_org_role_owner": "Owner",
+  "txt_org_role_member": "Member",
+  "txt_org_empty": "No organizations yet",
+  "txt_org_dialog_title": "New organization",
+  "txt_org_dialog_message": "Give your organization a name. You can invite members and add collections after it's created.",
+  "txt_org_name_placeholder": "Acme Inc.",
+  "txt_org_creating": "Creating…",
+  "txt_org_missing_encryption_key": "Your account is missing an encryption key. Sign out and back in, then try again.",
+  "txt_org_create_failed": "Failed to create organization",
+  "txt_org_created": "\"{name}\" was created.",
+  "txt_org_item_readonly": "Organization items are read-only here for now. No changes were saved."
+});
+
 export default zhCN;

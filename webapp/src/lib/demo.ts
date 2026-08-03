@@ -1423,6 +1423,10 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       state.setSends((prev) => prev.filter((item) => !idSet.has(item.id)));
       notify('success', t('txt_deleted_selected_sends'));
     },
+    onCreateOrganization: async () => {
+      await readonly();
+      return { id: createDemoId('organization') };
+    },
     onChangePassword: readonly,
     onSavePasswordHint: readonly,
     onEnableTotp: readonly,

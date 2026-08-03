@@ -1019,6 +1019,10 @@ export async function repairCipherUriChecksums(
 
   for (const cipher of ciphers) {
     if (!cipher?.id || cipher.type !== 1 || !cipher.login || !Array.isArray(cipher.login.uris)) continue;
+    // Never auto-repair org ciphers with the personal key: this phase has no org-key write
+    // path, and a keyless org login would silently fall back to the personal key here,
+    // corrupting the shared cipher for the whole org.
+    if (cipher.organizationId) continue;
     let keys: { enc: Uint8Array; mac: Uint8Array; key: string | null } = {
       enc: userEnc,
       mac: userMac,
@@ -1250,6 +1254,9 @@ export async function repairCipherKeyMismatches(
 
   for (const cipher of ciphers) {
     if (!cipher?.id || !looksLikeCipherString(cipher.key)) continue;
+    // Same org-cipher exclusion as repairCipherUriChecksums: this repair path must never
+    // rewrite an org cipher with the personal key, even if it happens to look "safe" today.
+    if (cipher.organizationId) continue;
     if (!(await hasItemKeyFieldMismatch(cipher, userEnc, userMac))) continue;
     if (hasUnresolvedEncryptedFields(cipher)) continue;
     await updateCipher(

@@ -319,6 +319,22 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
       throw new Error(t('txt_offline_vault_readonly'));
     };
 
+    // Org ciphers (cipher.organizationId set) are read-only in the vault UI for this phase:
+    // the write path (buildCipherPayload -> getCipherKeys) only knows the personal key, and
+    // silently falls back to it when an org-item-key MAC check fails, corrupting the shared
+    // cipher for the whole org. Fail closed until org keys are threaded into the write path (4b).
+    const requireNotOrgCipher = (cipher: Cipher | null | undefined) => {
+      if (cipher?.organizationId) throw new Error(t('txt_org_item_readonly'));
+    };
+
+    // Same guard for bulk actions, which only receive cipher ids: look the ids up against the
+    // currently known encrypted ciphers (which carry organizationId as synced from the server).
+    const requireNoOrgCiphersById = (ids: string[]) => {
+      const idSet = new Set(ids.map((id) => String(id || '').trim()).filter(Boolean));
+      const hasOrgCipher = (encryptedCiphers || []).some((cipher) => idSet.has(cipher.id) && !!cipher.organizationId);
+      if (hasOrgCipher) throw new Error(t('txt_org_item_readonly'));
+    };
+
     async function decryptAndPatch(encrypted: Cipher) {
       if (!session?.symEncKey || !session?.symMacKey) {
         await refetchCiphers();
@@ -565,6 +581,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
           throw error;
         }
+        try {
+          requireNotOrgCipher(cipher);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
         if (hasUnresolvedCipherData(cipher)) {
           throw new Error(t('txt_decrypt_failed_2'));
         }
@@ -641,6 +663,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
           throw error;
         }
+        try {
+          requireNotOrgCipher(cipher);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
         const previousCipher = { ...cipher };
         if (cipher.deletedDate || (cipher as { deletedAt?: string | null }).deletedAt) {
           try {
@@ -675,6 +703,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
           throw error;
         }
+        try {
+          requireNotOrgCipher(cipher);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
         const previousCipher = { ...cipher };
         const archivedDate = new Date().toISOString();
         patchCipherBatch([cipher.id], (current) => ({ ...current, archivedDate, deletedDate: null, revisionDate: archivedDate }));
@@ -695,6 +729,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           requireOnlineWrite();
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
+          throw error;
+        }
+        try {
+          requireNotOrgCipher(cipher);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
           throw error;
         }
         const previousCipher = { ...cipher };
@@ -720,6 +760,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           throw error;
         }
         try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
+        try {
           await bulkDeleteCiphers(authedFetch, ids);
           const deletedDate = new Date().toISOString();
           patchCipherBatch(ids, (cipher) => ({ ...cipher, deletedDate, archivedDate: null }));
@@ -736,6 +782,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           requireOnlineWrite();
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
+          throw error;
+        }
+        try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
           throw error;
         }
         try {
@@ -758,6 +810,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           throw error;
         }
         try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
+        try {
           await bulkUnarchiveCiphers(authedFetch, ids);
           patchCipherBatch(ids, (cipher) => ({ ...cipher, archivedDate: null }));
           void refreshVaultRevisionStamp();
@@ -773,6 +831,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           requireOnlineWrite();
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
+          throw error;
+        }
+        try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
           throw error;
         }
         try {
@@ -887,6 +951,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           throw error;
         }
         try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
+          throw error;
+        }
+        try {
           await bulkRestoreCiphers(authedFetch, ids);
           patchCipherBatch(ids, (cipher) => ({ ...cipher, deletedDate: null }));
           void refreshVaultRevisionStamp();
@@ -902,6 +972,12 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           requireOnlineWrite();
         } catch (error) {
           onNotify('error', error instanceof Error ? error.message : t('txt_offline_vault_readonly'));
+          throw error;
+        }
+        try {
+          requireNoOrgCiphersById(ids);
+        } catch (error) {
+          onNotify('error', error instanceof Error ? error.message : t('txt_org_item_readonly'));
           throw error;
         }
         try {

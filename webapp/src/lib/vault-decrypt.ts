@@ -1,12 +1,20 @@
 import { base64ToBytes, decryptBw, decryptStr } from './crypto';
 import { deriveSendKeyParts, looksLikeCipherString } from './app-support';
-import type { Cipher, Folder, Send } from './types';
+import { decryptWithOrgKey, orgKeyHalves } from './org-crypto';
+import type { Cipher, Collection, Folder, Send } from './types';
 
 export interface DecryptVaultCoreArgs {
   folders: Folder[];
   ciphers: Cipher[];
   symEncKeyB64: string;
   symMacKeyB64: string;
+  /**
+   * orgId -> unwrapped 64-byte org key (enc || mac), built once per session
+   * from `profile.organizations[]` via `unwrapOrgKey`. Ciphers whose
+   * `organizationId` isn't in this map are dropped from the result rather
+   * than decrypted with the wrong (personal) key -- see the org-branch below.
+   */
+  orgKeys?: Record<string, Uint8Array>;
 }
 
 export interface DecryptVaultCoreResult {
@@ -117,18 +125,45 @@ async function decryptFieldWithSource(
 }
 
 export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<DecryptVaultCoreResult> {
-  const userEnc = base64ToBytes(args.symEncKeyB64);
-  const userMac = base64ToBytes(args.symMacKeyB64);
+  const personalEnc = base64ToBytes(args.symEncKeyB64);
+  const personalMac = base64ToBytes(args.symMacKeyB64);
 
   const folders = await Promise.all(
     args.folders.map(async (folder) => ({
       ...folder,
-      decName: await decryptField(folder.name, userEnc, userMac),
+      decName: await decryptField(folder.name, personalEnc, personalMac),
     }))
   );
 
-  const ciphers = await Promise.all(
-    args.ciphers.map(async (cipher) => {
+  const decryptedCiphers = await Promise.all(
+    args.ciphers.map(async (cipher): Promise<Cipher | null> => {
+      // SECURITY: an org cipher must only ever be decrypted with ITS OWN org's
+      // key, never the personal user key or another org's key. `userEnc`/
+      // `userMac` below are shadowed to the resolved org key halves for org
+      // ciphers (or the personal key for personal ciphers) so every existing
+      // field-decrypt call site further down -- which all reference
+      // `userEnc`/`userMac` as the base/fallback key -- stays correct without
+      // being individually rewritten.
+      const organizationId = cipher.organizationId || null;
+      let userEnc = personalEnc;
+      let userMac = personalMac;
+      if (organizationId) {
+        const orgKey = args.orgKeys?.[organizationId];
+        if (!orgKey) {
+          // Org key not unwrapped (missing membership, failed RSA unwrap,
+          // etc). Skip this cipher rather than render garbage or fall back
+          // to the personal key.
+          return null;
+        }
+        try {
+          const halves = orgKeyHalves(orgKey);
+          userEnc = halves.enc;
+          userMac = halves.mac;
+        } catch {
+          return null;
+        }
+      }
+
       let itemEnc = userEnc;
       let itemMac = userMac;
       let usesItemKey = false;
@@ -294,7 +329,32 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
     })
   );
 
+  const ciphers = decryptedCiphers.filter((cipher): cipher is Cipher => cipher !== null);
+
   return { folders, ciphers };
+}
+
+/**
+ * Decrypt org collection names (sync's `collections[]`) with each collection's
+ * owning org key. Guarded per-collection: a collection whose org key isn't in
+ * `orgKeys` (or whose name fails to decrypt) gets an empty `decName` rather
+ * than crashing the whole batch.
+ */
+export async function decryptCollections(
+  collections: Collection[],
+  orgKeys: Record<string, Uint8Array>
+): Promise<Collection[]> {
+  return Promise.all(
+    collections.map(async (collection) => {
+      const orgKey = orgKeys[collection.organizationId];
+      if (!orgKey) return { ...collection, decName: '' };
+      try {
+        return { ...collection, decName: await decryptWithOrgKey(collection.name, orgKey) };
+      } catch {
+        return { ...collection, decName: '' };
+      }
+    })
+  );
 }
 
 export async function decryptSends(args: DecryptSendsArgs): Promise<Send[]> {

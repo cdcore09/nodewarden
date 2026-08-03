@@ -1464,4 +1464,20 @@ Object.assign(de, { "txt_password_security_last_checked": "Zuletzt überprüft: 
 Object.assign(de, { "txt_no_password_risks_in_filter": "Keine Passwortrisiken in dieser Kategorie" });
 Object.assign(de, { "txt_password_security_show_all": "Alle anzeigen", "txt_password_security_hide_all": "Alle ausblenden", "txt_password_security_jump": "Öffnen", "txt_password_security_exposed_short": "{count}-mal geleakt", "txt_password_security_weak_short": "Schwaches Passwort", "txt_password_security_reused_short": "Wiederverwendet" });
 
+Object.assign(de, {
+  "txt_org_page_title": "Organizations",
+  "txt_org_new_button": "New organization",
+  "txt_org_role_owner": "Owner",
+  "txt_org_role_member": "Member",
+  "txt_org_empty": "No organizations yet",
+  "txt_org_dialog_title": "New organization",
+  "txt_org_dialog_message": "Give your organization a name. You can invite members and add collections after it's created.",
+  "txt_org_name_placeholder": "Acme Inc.",
+  "txt_org_creating": "Creating…",
+  "txt_org_missing_encryption_key": "Your account is missing an encryption key. Sign out and back in, then try again.",
+  "txt_org_create_failed": "Failed to create organization",
+  "txt_org_created": "\"{name}\" was created.",
+  "txt_org_item_readonly": "Organization items are read-only here for now. No changes were saved."
+});
+
 export default de;

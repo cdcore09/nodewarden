@@ -7,8 +7,9 @@ import LoadingState from '@/components/LoadingState';
 import type { AdminBackupImportResponse, AdminBackupRunResponse, AdminBackupSettings, RemoteBackupBrowserResponse } from '@/lib/api/backup';
 import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload } from '@/lib/api/vault';
+import type { CreateOrganizationInput } from '@/lib/api/organizations';
 import { t } from '@/lib/i18n';
-import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
+import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, Collection, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
 import type { ExportRequest } from '@/lib/export-formats';
 
 const VaultPage = lazy(() => import('@/components/VaultPage'));
@@ -23,6 +24,7 @@ const AdminPage = lazy(() => import('@/components/AdminPage'));
 const LogCenterPage = lazy(() => import('@/components/LogCenterPage'));
 const BackupCenterPage = lazy(() => import('@/components/BackupCenterPage'));
 const ImportPage = lazy(() => import('@/components/ImportPage'));
+const OrganizationsPage = lazy(() => import('@/components/OrganizationsPage'));
 
 function RouteContentFallback() {
   return <LoadingState card lines={5} />;
@@ -48,6 +50,8 @@ export interface AppMainRoutesProps {
   decryptedCiphers: Cipher[];
   decryptedFolders: VaultFolder[];
   decryptedSends: Send[];
+  /** Decrypted org collections (Phase 4a read path); not yet consumed by any route — 4b wires this in. */
+  decryptedCollections?: Collection[];
   vaultError: string;
   ciphersLoading: boolean;
   foldersLoading: boolean;
@@ -71,6 +75,7 @@ export interface AppMainRoutesProps {
   onNavigate: (path: string) => void;
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
+  onCreateOrganization: (input: CreateOrganizationInput) => Promise<{ id: string }>;
   onThemePreferenceChange: (preference: 'system' | 'light' | 'dark') => void;
   onImport: (
     payload: CiphersImportPayload,
@@ -245,6 +250,19 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             onNotify={props.onNotify}
           />
         </Suspense>
+      </Route>
+      <Route path="/organizations">
+        {props.profile ? (
+          <Suspense fallback={<RouteContentFallback />}>
+            <OrganizationsPage
+              profile={props.profile}
+              onCreateOrganization={props.onCreateOrganization}
+              onNotify={props.onNotify}
+            />
+          </Suspense>
+        ) : props.profileLoading ? (
+          <LoadingState card lines={5} />
+        ) : null}
       </Route>
       <Route path="/vault/totp">
         <Suspense fallback={<RouteContentFallback />}>

@@ -28,6 +28,7 @@ const intentionallyEnglishPrefixes = [
   'txt_log_reason_',
   'txt_log_target_type_',
   'txt_log_trigger_',
+  'txt_org_',
 ];
 
 function isIntentionallyEnglishKey(key) {
