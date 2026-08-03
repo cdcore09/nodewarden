@@ -101,6 +101,9 @@ mapping.
 ## UI phase (4/5) notes
 
 - `webapp/src/lib/api/backup.ts` `AdminBackupImportCounts` type is missing the five new optional org-table count fields (server sends them; untyped consumer ignores them today). Update when touching the webapp.
+- **`PUT /api/ciphers/:id/collections` (collection reassignment) is NOT implemented** (Phase 3b, per final review Minor #5): an org cipher's collection set is fixed at create/share time. The UI's "move to collections" / edit-collections control needs this endpoint — implement it then (replace-semantics on cipher_collections, same org-consistency + write-permission validation as `handleShareCipher`; a `setCipherCollections` repo helper).
+- **Non-creator org-cipher folder handling** (Phase 3b final review Minor #4, folds into the folder_id-shared-across-viewers limitation below): `handleUpdateCipher` runs `verifyFolderOwnership(cipher.folderId, actingUser)`, which can spuriously 404 a legitimate org writer who isn't the creator when the client omits `folderId`. Resolve alongside the per-user-folder decision.
+- **Backup import cipher_collections org-consistency** (Phase 3b final review Minor #6): backup import validates cipher `organization_id` references exist, but not that a cipher_collections row's cipher and collection share an org. Coherence-only (the member query's org check tolerates inconsistent rows); add alongside the existing referential checks if hardening backup import.
 
 ## Accepted/cosmetic deferrals (no action required)
 
