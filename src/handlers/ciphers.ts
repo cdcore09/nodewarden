@@ -14,6 +14,7 @@ import {
   PasswordHistory,
 } from '../types';
 import { StorageService } from '../services/storage';
+import { canReadCipher, canWriteCipher } from '../services/org-access';
 import {
   notifyUserCipherCreate,
   notifyUserCipherDelete,
@@ -916,9 +917,9 @@ export async function handleGetCiphers(request: Request, env: Env, userId: strin
 // GET /api/ciphers/:id
 export async function handleGetCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canReadCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -960,6 +961,18 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   const createDriversLicense = readCipherProp<CipherDriversLicense | null>(cipherData, ['driversLicense', 'DriversLicense']);
   const createPassport = readCipherProp<CipherPassport | null>(cipherData, ['passport', 'Passport']);
   const createPasswordHistory = readCipherProp<PasswordHistory[] | null>(cipherData, ['passwordHistory', 'PasswordHistory']);
+  // SECURITY: organizationId/collectionIds are client-supplied input on create.
+  // If unvalidated, a user with no membership in org Y could POST
+  // {organizationId: "org-Y"} and have it persist as an org-Y cipher (Task 1
+  // review finding). Read the intent here; validate below before persisting.
+  const createOrganizationId = readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']);
+  const requestedOrganizationId = normalizeOptionalId(
+    createOrganizationId.present ? createOrganizationId.value : null
+  );
+  const createCollectionIds = readCipherProp<string[] | null>(cipherData, ['collectionIds', 'CollectionIds']);
+  const requestedCollectionIds = Array.isArray(createCollectionIds.value)
+    ? Array.from(new Set(createCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
+    : [];
 
   if (createKey.present && !shouldAcceptCipherKey(createKey.value)) {
     return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
@@ -973,6 +986,8 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     // Server-controlled fields (always override client values)
     id: generateUUID(),
     userId: userId,
+    // Validated below, never the raw client value.
+    organizationId: requestedOrganizationId,
     type: Number(cipherData.type) || 1,
     favorite: !!cipherData.favorite,
     reprompt: cipherData.reprompt || 0,
@@ -1004,7 +1019,48 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
+  // SECURITY (Task 1 review finding): a non-null organizationId means this is
+  // an org cipher — validate membership, collection org-consistency, and
+  // write access to every target collection before persisting. A stranger
+  // to org Y must never be able to make org-Y-owned data.
+  if (requestedOrganizationId) {
+    const orgUser = await storage.getOrgUserByOrgAndUser(requestedOrganizationId, userId);
+    if (!orgUser || orgUser.status !== 'confirmed') {
+      return errorResponse('Cipher not found', 404);
+    }
+
+    if (requestedCollectionIds.length > 0) {
+      const collections = await Promise.all(
+        requestedCollectionIds.map((cid) => storage.getCollection(cid))
+      );
+      for (const collection of collections) {
+        if (!collection || collection.orgId !== requestedOrganizationId) {
+          return errorResponse('Invalid collection', 400);
+        }
+      }
+
+      // Owners always have write access to every collection in their org
+      // (sole-admin model). Non-owner members need a non-read-only grant on
+      // every target collection.
+      if (orgUser.role !== 'owner') {
+        const memberCollections = await storage.listCollectionsForMember(orgUser.id);
+        const writableCollectionIds = new Set(
+          memberCollections.filter((entry) => !entry.readOnly).map((entry) => entry.collection.id)
+        );
+        const canWriteAllTargets = requestedCollectionIds.every((cid) => writableCollectionIds.has(cid));
+        if (!canWriteAllTargets) {
+          return errorResponse('Insufficient collection permissions', 403);
+        }
+      }
+    }
+
+    cipher.collectionIds = requestedCollectionIds;
+  }
+
   await storage.saveCipher(cipher);
+  if (requestedOrganizationId && requestedCollectionIds.length > 0) {
+    await storage.addCipherToCollections(cipher.id, requestedCollectionIds);
+  }
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherCreateForRequest(request, env, cipher, revisionDate);
@@ -1019,9 +1075,9 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
 // PUT /api/ciphers/:id
 export async function handleUpdateCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const existingCipher = await storage.getCipherForUser(id, userId);
+  const existingCipher = await storage.getCipher(id);
 
-  if (!existingCipher || existingCipher.userId !== userId) {
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1071,6 +1127,10 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
     // Server-controlled fields (never from client)
     id: existingCipher.id,
     userId: existingCipher.userId,
+    // A plain update must NOT be able to move a cipher into/out of/between
+    // orgs — that's the /share endpoint's job. Force it to the existing
+    // value so a spoofed body organizationId is ignored.
+    organizationId: existingCipher.organizationId,
     type: nextType,
     favorite: cipherData.favorite ?? existingCipher.favorite,
     reprompt: cipherData.reprompt ?? existingCipher.reprompt,
@@ -1136,9 +1196,9 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
 // DELETE /api/ciphers/:id
 export async function handleDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1168,9 +1228,9 @@ export async function handleDeleteCipher(request: Request, env: Env, userId: str
 // - If item is already soft-deleted -> hard delete.
 export async function handleDeleteCipherCompat(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1195,9 +1255,9 @@ export async function handleDeleteCipherCompat(request: Request, env: Env, userI
 // DELETE /api/ciphers/:id (permanent)
 export async function handlePermanentDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1220,9 +1280,9 @@ export async function handlePermanentDeleteCipher(request: Request, env: Env, us
 // PUT /api/ciphers/:id/restore
 export async function handleRestoreCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1242,9 +1302,9 @@ export async function handleRestoreCipher(request: Request, env: Env, userId: st
 // PUT /api/ciphers/:id/partial - Update only favorite/folderId
 export async function handlePartialUpdateCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1334,9 +1394,9 @@ function parseCipherIdList(body: { ids?: unknown }): string[] | null {
 // PUT/POST /api/ciphers/:id/archive
 export async function handleArchiveCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
   if (cipher.deletedAt) {
@@ -1360,9 +1420,9 @@ export async function handleArchiveCipher(request: Request, env: Env, userId: st
 // PUT/POST /api/ciphers/:id/unarchive
 export async function handleUnarchiveCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
