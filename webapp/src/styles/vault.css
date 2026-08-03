@@ -230,7 +230,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .list-head {
-  @apply mb-1.5 flex items-center gap-2;
+  @apply mb-1.5 flex flex-wrap items-center gap-2;
   min-height: 34px;
 }
 
