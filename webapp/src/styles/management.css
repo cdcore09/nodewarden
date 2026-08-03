@@ -1879,7 +1879,9 @@
 }
 
 .authorized-devices-actions {
-  flex-wrap: nowrap;
+  /* Wrap instead of clipping: four non-shrinking buttons overflow the
+     fixed 26% actions column at common widths, hiding Delete entirely. */
+  flex-wrap: wrap;
   gap: 6px;
 }
 
