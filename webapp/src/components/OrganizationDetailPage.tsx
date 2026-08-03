@@ -40,7 +40,7 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
     [props.profile, props.orgId]
   );
   const [tab] = useState<'members'>('members');
-  const { members, loading, error, invite } = useOrgMemberActions({
+  const { members, loading, error, invite, resend, remove } = useOrgMemberActions({
     authedFetch: props.authedFetch,
     orgId: props.orgId,
     onNotify: props.onNotify,
@@ -68,6 +68,35 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
       props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_invite_failed'));
     } finally {
       setInviteSubmitting(false);
+    }
+  };
+
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; email: string } | null>(null);
+  const [removeSubmitting, setRemoveSubmitting] = useState(false);
+
+  const handleResend = async (orgUserId: string) => {
+    if (busyMemberId) return;
+    setBusyMemberId(orgUserId);
+    try {
+      await resend(orgUserId);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_resend_failed'));
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
+  const submitRemove = async () => {
+    if (!removeTarget || removeSubmitting) return;
+    setRemoveSubmitting(true);
+    try {
+      await remove(removeTarget.id);
+      setRemoveTarget(null);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_remove_failed'));
+    } finally {
+      setRemoveSubmitting(false);
     }
   };
 
@@ -130,7 +159,29 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
                   <td data-label={t('txt_org_col_status')}>
                     <span className={`risk-badge org-status-${member.status}`}>{memberStatusLabel(member.status)}</span>
                   </td>
-                  <td data-label={t('txt_org_col_actions')} />
+                  <td data-label={t('txt_org_col_actions')}>
+                    <div className="actions">
+                      {member.status === 0 && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary small"
+                          disabled={busyMemberId === member.id}
+                          onClick={() => void handleResend(member.id)}
+                        >
+                          {t('txt_org_resend_button')}
+                        </button>
+                      )}
+                      {member.type !== ORGANIZATION_TYPE_OWNER && (
+                        <button
+                          type="button"
+                          className="btn btn-danger small"
+                          onClick={() => setRemoveTarget({ id: member.id, email: member.email })}
+                        >
+                          {t('txt_org_remove_button')}
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!members.length && (
@@ -167,6 +218,22 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
           />
         </label>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        variant="warning"
+        title={t('txt_org_remove_title')}
+        message={removeTarget ? t('txt_org_remove_message', { email: removeTarget.email }) : ''}
+        confirmText={t('txt_org_remove_button')}
+        cancelText={t('txt_cancel')}
+        danger
+        confirmDisabled={removeSubmitting}
+        cancelDisabled={removeSubmitting}
+        onConfirm={() => void submitRemove()}
+        onCancel={() => {
+          if (!removeSubmitting) setRemoveTarget(null);
+        }}
+      />
     </div>
   );
 }

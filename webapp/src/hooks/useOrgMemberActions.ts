@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'preact/hooks';
 import type { AuthedFetch } from '@/lib/api/shared';
-import { inviteOrgUsers, listOrgUsers, type OrgMember } from '@/lib/api/organizations';
+import { inviteOrgUsers, listOrgUsers, removeOrgUser, resendOrgInvite, type OrgMember } from '@/lib/api/organizations';
 import { t } from '@/lib/i18n';
 
 type Notify = (type: 'success' | 'error' | 'warning', text: string) => void;
@@ -43,7 +43,24 @@ export function useOrgMemberActions(opts: UseOrgMemberActionsOptions) {
     [opts.authedFetch, opts.orgId, reload]
   );
 
-  return { members, loading, error, reload, invite };
+  const resend = useCallback(
+    async (orgUserId: string) => {
+      await resendOrgInvite(opts.authedFetch, opts.orgId, orgUserId);
+      opts.onNotify?.('success', t('txt_org_invite_resent'));
+    },
+    [opts.authedFetch, opts.orgId]
+  );
+
+  const remove = useCallback(
+    async (orgUserId: string) => {
+      await removeOrgUser(opts.authedFetch, opts.orgId, orgUserId);
+      await reload();
+      opts.onNotify?.('success', t('txt_org_member_removed'));
+    },
+    [opts.authedFetch, opts.orgId, reload]
+  );
+
+  return { members, loading, error, reload, invite, resend, remove };
 }
 
 export default useOrgMemberActions;

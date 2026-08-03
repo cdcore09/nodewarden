@@ -1498,7 +1498,15 @@ Object.assign(ru, {
   "txt_org_invite_message": "Enter one or more email addresses, separated by commas or spaces.",
   "txt_org_invite_email_placeholder": "member@example.com",
   "txt_org_invite_sent": "Invitation sent",
-  "txt_org_invite_failed": "Failed to invite members"
+  "txt_org_invite_failed": "Failed to invite members",
+  "txt_org_resend_button": "Resend",
+  "txt_org_invite_resent": "Invitation resent",
+  "txt_org_resend_failed": "Failed to resend invite",
+  "txt_org_remove_button": "Remove",
+  "txt_org_remove_title": "Remove member",
+  "txt_org_remove_message": "Remove {email} from this organization? They will lose access to all items shared with it.",
+  "txt_org_member_removed": "Member removed",
+  "txt_org_remove_failed": "Failed to remove member"
 });
 
 export default ru;
