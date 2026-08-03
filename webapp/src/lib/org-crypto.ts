@@ -12,7 +12,8 @@
 // symmetric with the existing Bitwarden type-4 enc-string convention
 // (`RSA2048_OAEP_SHA1_B64`, prefix `"4."`).
 
-import { base64ToBytes, bytesToBase64, decryptStr, encryptBw, requireWebCrypto, toBufferSource } from './crypto';
+import { base64ToBytes, bytesToBase64, decryptBw, decryptStr, encryptBw, requireWebCrypto, toBufferSource } from './crypto';
+import { importPortablePrivateKey } from './admin-backup-portable';
 
 const RSA_ALGORITHM = 'RSA-OAEP';
 const RSA_HASH = 'SHA-1';
@@ -117,7 +118,27 @@ export async function unwrapOrgKey(wrappedKey: string, userRsaPrivateKey: Crypto
   const orgKey = new Uint8Array(
     await subtle.decrypt({ name: RSA_ALGORITHM }, userRsaPrivateKey, toBufferSource(ciphertext))
   );
+  if (orgKey.length !== ORG_KEY_LENGTH) {
+    throw new Error('Invalid wrapped org key: unexpected length');
+  }
   return orgKey;
+}
+
+/**
+ * Decrypt the current user's account RSA private key (`profile.privateKey`,
+ * a Bitwarden enc string) using their unlocked vault key halves, and import
+ * it as an RSA-OAEP/SHA-1 private key usable with `unwrapOrgKey`.
+ *
+ * Mirrors `admin-backup-portable.ts`'s private-key import (same RSA params),
+ * reusing its `importPortablePrivateKey` helper rather than duplicating it.
+ */
+export async function getAccountRsaPrivateKey(
+  profilePrivateKey: string,
+  userEnc: Uint8Array,
+  userMac: Uint8Array
+): Promise<CryptoKey> {
+  const privateKeyBytes = await decryptBw(profilePrivateKey, userEnc, userMac);
+  return importPortablePrivateKey(privateKeyBytes);
 }
 
 /**
