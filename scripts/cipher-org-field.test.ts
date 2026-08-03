@@ -99,3 +99,20 @@ test('saveCipher persists organizationId to the physical column even when updati
   const raw = await db.prepare('SELECT organization_id FROM ciphers WHERE id = ?').bind('c3').first<any>();
   assert.equal(raw?.organization_id, 'org-2');
 });
+
+test('org cipher persists with folder_id null (folders are personal-only)', async () => {
+  const db = createTestDb();
+  await seedUser(db, 'u1', 'me@x.y');
+  const storage = new StorageService(db);
+
+  // An org cipher that (incorrectly) arrived carrying a folderId must be
+  // stored folderless -- the handler is responsible for nulling it before
+  // saveCipher is ever called; this is a regression guard on the storage
+  // layer honoring that null.
+  const orgCipher = { ...makeCipher('oc1', 'u1', 'o1'), folderId: null };
+  await storage.saveCipher(orgCipher);
+  const back = await storage.getCipher('oc1');
+
+  assert.equal(back?.organizationId, 'o1');
+  assert.equal(back?.folderId ?? null, null);
+});

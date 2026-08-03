@@ -236,6 +236,55 @@ if (process.env.REG_CODE_2) {
         cipherAfterMember2.collectionIds[0] === colCId,
       JSON.stringify(cipherAfterMember2)
     );
+
+    // --- 5b. TASK 3 REGRESSION: plain (non-collections) PUT /api/ciphers/:id
+    // update by a confirmed, non-creator org writer must not 404 on the
+    // personal-folder check. Folders are a personal-vault concept keyed to
+    // the folder's OWNER (admin here); handleUpdateCipher must ignore
+    // folder_id entirely for org ciphers. Reproduce the pre-fix bug
+    // precisely: admin creates a personal folder + a personal cipher filed
+    // in it, then shares that cipher into collection C (member2 already
+    // holds a writable grant there from above). Before the fix,
+    // cipher.folderId (admin's personal folder) survived the share and a
+    // plain edit by member2 -- who does not own admin's folder -- would
+    // 404 out of verifyFolderOwnership even though member2 has a legitimate
+    // writable grant on the cipher's collection. After the fix, org ciphers
+    // force folderId = null and skip that check, so this must be 200.
+    const folderRes = await api('POST', '/api/folders', adminToken, { name: enc('smoke-folder') });
+    check('admin creates personal folder', folderRes.status === 200 && folderRes.json?.id, `status ${folderRes.status}: ${folderRes.text}`);
+    const folderId = folderRes.json?.id;
+
+    const foldered = loginCipherBody('foldered-personal', null, null);
+    foldered.cipher.folderId = folderId;
+    const folderedCipherRes = await api('POST', '/api/ciphers', adminToken, foldered);
+    check('admin creates personal cipher filed in that folder', folderedCipherRes.status === 200 && folderedCipherRes.json?.id, `status ${folderedCipherRes.status}: ${folderedCipherRes.text}`);
+    const folderedCipherId = folderedCipherRes.json?.id;
+
+    const shareFolderedRes = await api(
+      'POST',
+      `/api/ciphers/${folderedCipherId}/share`,
+      adminToken,
+      loginCipherBody('foldered-personal', orgId, [colCId])
+    );
+    check(
+      'admin shares foldered personal cipher into collection C (folderId carries over from the personal cipher)',
+      shareFolderedRes.status === 200 && shareFolderedRes.json?.organizationId === orgId,
+      `status ${shareFolderedRes.status}: ${shareFolderedRes.text}`
+    );
+
+    // Plain edit, no folderId in the body -- member2 is not the folder's
+    // owner and is not the cipher's creator, only a confirmed org writer.
+    const member2PlainEdit = await api(
+      'PUT',
+      `/api/ciphers/${folderedCipherId}`,
+      member2.token,
+      loginCipherBody('foldered-personal-edited-by-member2', orgId, null)
+    );
+    check(
+      'member2 (non-creator, writable grant, no folderId sent) plain-edits the shared org cipher -> 200 (was 404)',
+      member2PlainEdit.status === 200,
+      `status ${member2PlainEdit.status}: ${member2PlainEdit.text}`
+    );
   }
 } else {
   console.log('skip member2 writable-grant check (no REG_CODE_2)');

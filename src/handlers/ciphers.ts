@@ -1212,7 +1212,13 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
     archivedAt: readCipherArchivedAt(cipherData, existingCipher.archivedAt ?? null),
     deletedAt: existingCipher.deletedAt,
   };
-  if (incomingFolderId.present) {
+  if (cipher.organizationId) {
+    // Org ciphers have no personal-folder concept (one folder_id column tied
+    // to the creator's user_id can't be shared coherently across members).
+    // Never carry the creator's personal folder onto an org cipher -- org
+    // ciphers use collections for organization instead.
+    cipher.folderId = null;
+  } else if (incomingFolderId.present) {
     cipher.folderId = normalizeOptionalId(incomingFolderId.value);
   }
   if (incomingKey.present) {
@@ -1247,8 +1253,12 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
   if (compatibilityError) return errorResponse(compatibilityError, 400);
 
-  // Prevent referencing a folder owned by another user.
-  if (cipher.folderId) {
+  // Prevent referencing a folder owned by another user. Org ciphers never
+  // carry a folderId (forced null above) and skip this personal-folder
+  // ownership check entirely -- otherwise it would spuriously 404 a
+  // non-creator org writer, since verifyFolderOwnership only recognizes the
+  // ORIGINAL CREATOR's personal folder, not the acting org member's.
+  if (!cipher.organizationId && cipher.folderId) {
     const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
