@@ -47,7 +47,7 @@
 }
 
 .folder-add-btn:hover {
-  color: #1d4ed8;
+  color: var(--primary-hover);
 }
 
 .search-input {
@@ -161,7 +161,7 @@
 }
 
 .folder-sort-btn:hover {
-  color: #1d4ed8;
+  color: var(--primary-hover);
   background: #dbeafe;
   transform: scale(1.06);
 }
@@ -962,7 +962,7 @@ select.input.duplicate-mode-toolbar-select {
 }
 
 .totp-ring-progress {
-  stroke: #2563eb;
+  stroke: var(--primary);
   stroke-linecap: round;
   transition: stroke-dashoffset 260ms linear, stroke 200ms ease;
 }
