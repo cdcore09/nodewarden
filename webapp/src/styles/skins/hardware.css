@@ -1,0 +1,79 @@
+/* ── Hardware Key ──────────────────────────────────────────────────────────
+   Industrial/utilitarian. Steel and gunmetal with signal amber, monospace
+   headings, sharp minimal radii, near-flat shadows. Firmware UI energy.
+   Token overrides only; the dark block redefines every color the light
+   block sets so it always wins over the stock dark theme. */
+
+:root[data-skin='hardware'] {
+  --bg-accent: #eef0f2;
+  --panel: #ffffff;
+  --panel-soft: #f5f7f8;
+  --panel-muted: #e7eaed;
+  --panel-subtle: #fafbfc;
+  --surface: #ffffff;
+  --line: rgba(46, 64, 87, 0.30);
+  --line-soft: rgba(46, 64, 87, 0.16);
+  --text: #1a222c;
+  --text-muted: #5b6875;
+  --muted: #5b6875;
+  --muted-strong: #38434f;
+  --primary: #2e4057;
+  --primary-hover: #24344a;
+  --primary-strong: #1b283a;
+  --accent: #d98e04;
+  --accent-soft: #faf0da;
+  --danger: #c22f2f;
+  --success: #2f7d4f;
+  --warning: #d98e04;
+  --overlay-strong: rgba(15, 20, 26, 0.66);
+  --shadow-sm: 0 1px 2px rgba(20, 26, 32, 0.08);
+  --shadow-md: 0 2px 4px rgba(20, 26, 32, 0.10);
+  --shadow-lg: 0 8px 16px -4px rgba(20, 26, 32, 0.14);
+  --shadow-xl: 0 16px 32px -8px rgba(20, 26, 32, 0.22);
+  --shadow-glow: 0 0 16px rgba(217, 142, 4, 0.14), 0 4px 12px rgba(46, 64, 87, 0.12);
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+}
+
+:root[data-skin='hardware'][data-theme='dark'] {
+  --bg-accent: #14171a;
+  --panel: #1d2126;
+  --panel-soft: #181c20;
+  --panel-muted: #121518;
+  --panel-subtle: #22272d;
+  --line: rgba(160, 174, 192, 0.20);
+  --line-soft: rgba(160, 174, 192, 0.10);
+  --surface: #1d2126;
+  --text: #e8ecf1;
+  --text-muted: #8b98a5;
+  --muted: #8b98a5;
+  --muted-strong: #c2ccd6;
+  --primary: #8fb4dd;
+  --primary-hover: #a9c6e8;
+  --primary-strong: #c6dcf3;
+  --accent: #f0a818;
+  --accent-soft: rgba(240, 168, 24, 0.12);
+  --danger: #f07862;
+  --success: #55b878;
+  --warning: #f0a818;
+  --overlay-strong: rgba(0, 0, 0, 0.78);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.46);
+  --shadow-lg: 0 8px 16px -4px rgba(0, 0, 0, 0.52);
+  --shadow-xl: 0 16px 32px -8px rgba(0, 0, 0, 0.62);
+  --shadow-glow: 0 0 16px rgba(240, 168, 24, 0.18), 0 4px 12px rgba(143, 180, 221, 0.14);
+}
+
+/* Monospace headings — the HSM console voice. Element selectors + .brand
+   only, stable across upstream markup changes. */
+:root[data-skin='hardware'] h1,
+:root[data-skin='hardware'] h2,
+:root[data-skin='hardware'] h3,
+:root[data-skin='hardware'] h4,
+:root[data-skin='hardware'] .brand {
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+}

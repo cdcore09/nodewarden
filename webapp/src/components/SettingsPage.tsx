@@ -5,6 +5,7 @@ import qrcode from 'qrcode-generator';
 import type { AccountPasskeyCredential, Profile, TwoFactorPasskeyCredential, TwoFactorPasskeySettings, YubiKeyOtpSettings } from '@/lib/types';
 import { AVAILABLE_LOCALES, getLocale, setLocale, t, type Locale } from '@/lib/i18n';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import SkinSelect from '@/components/SkinSelect';
 
 interface SettingsPageProps {
   profile: Profile;
@@ -571,6 +572,8 @@ export default function SettingsPage(props: SettingsPageProps) {
                   <div className="field-help">{t('txt_theme_saved_locally')}</div>
                 </label>
               </section>
+
+              <SkinSelect />
 
               <section className="settings-submodule">
                 <label className="field">

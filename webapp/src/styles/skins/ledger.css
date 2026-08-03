@@ -1,0 +1,79 @@
+/* ── Paper Ledger ──────────────────────────────────────────────────────────
+   Organic/natural. Warm parchment with sage green and terracotta, bookish
+   serif headings, paper-lift shadows. A trusted hand-kept ledger.
+   Token overrides only; the dark block redefines every color the light
+   block sets so it always wins over the stock dark theme. */
+
+:root[data-skin='ledger'] {
+  --bg-accent: #f6f1e7;
+  --panel: #fffdf6;
+  --panel-soft: #faf5ea;
+  --panel-muted: #efe7d6;
+  --panel-subtle: #fcf8ee;
+  --surface: #fffdf6;
+  --line: rgba(112, 94, 64, 0.26);
+  --line-soft: rgba(112, 94, 64, 0.14);
+  --text: #2c2418;
+  --text-muted: #7a6f5c;
+  --muted: #7a6f5c;
+  --muted-strong: #52483a;
+  --primary: #5a7157;
+  --primary-hover: #4a5f48;
+  --primary-strong: #3b4d3a;
+  --accent: #c0603c;
+  --accent-soft: #f6e4da;
+  --danger: #b5442a;
+  --success: #4c7d52;
+  --warning: #b07f2e;
+  --overlay-strong: rgba(35, 28, 18, 0.60);
+  --shadow-sm: 0 1px 3px rgba(80, 64, 40, 0.10), 0 1px 2px rgba(80, 64, 40, 0.06);
+  --shadow-md: 0 4px 8px -1px rgba(80, 64, 40, 0.12), 0 2px 4px -1px rgba(80, 64, 40, 0.07);
+  --shadow-lg: 0 18px 26px -6px rgba(80, 64, 40, 0.15), 0 9px 11px -5px rgba(80, 64, 40, 0.07);
+  --shadow-xl: 0 25px 50px -12px rgba(58, 46, 28, 0.30);
+  --shadow-glow: 0 0 20px rgba(192, 96, 60, 0.14), 0 8px 24px rgba(90, 113, 87, 0.12);
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+}
+
+:root[data-skin='ledger'][data-theme='dark'] {
+  --bg-accent: #171310;
+  --panel: #211b16;
+  --panel-soft: #1c1712;
+  --panel-muted: #151110;
+  --panel-subtle: #282017;
+  --surface: #211b16;
+  --line: rgba(196, 176, 140, 0.18);
+  --line-soft: rgba(196, 176, 140, 0.10);
+  --text: #ece3d3;
+  --text-muted: #a2957f;
+  --muted: #a2957f;
+  --muted-strong: #cbc0ab;
+  --primary: #93ae8d;
+  --primary-hover: #aac4a4;
+  --primary-strong: #c5d8c0;
+  --accent: #e08a63;
+  --accent-soft: rgba(224, 138, 99, 0.12);
+  --danger: #f2705d;
+  --success: #8dbb8a;
+  --warning: #d6a24e;
+  --overlay-strong: rgba(0, 0, 0, 0.75);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.42), 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.46), 0 2px 4px -1px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.52), 0 10px 10px -5px rgba(0, 0, 0, 0.42);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.62);
+  --shadow-glow: 0 0 20px rgba(224, 138, 99, 0.16), 0 8px 24px rgba(147, 174, 141, 0.14);
+}
+
+/* Bookish serif heading voice. Element selectors + .brand only, stable
+   across upstream markup changes. */
+:root[data-skin='ledger'] h1,
+:root[data-skin='ledger'] h2,
+:root[data-skin='ledger'] h3,
+:root[data-skin='ledger'] h4,
+:root[data-skin='ledger'] .brand {
+  font-family: Georgia, 'Book Antiqua', 'Palatino Linotype', Palatino, serif;
+  letter-spacing: 0.005em;
+}

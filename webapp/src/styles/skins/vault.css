@@ -1,0 +1,79 @@
+/* ── Private Vault ─────────────────────────────────────────────────────────
+   Luxury/refined. Deep evergreen and charcoal with warm brass accents,
+   serif display type, soft generous radii. A private bank at closing time.
+   Token overrides only; the dark block redefines every color the light
+   block sets so it always wins over the stock dark theme. */
+
+:root[data-skin='vault'] {
+  --bg-accent: #f4f1ea;
+  --panel: #fffdf8;
+  --panel-soft: #faf7f0;
+  --panel-muted: #f0ebe0;
+  --panel-subtle: #fcfaf4;
+  --surface: #fffdf8;
+  --line: rgba(93, 83, 60, 0.24);
+  --line-soft: rgba(93, 83, 60, 0.13);
+  --text: #1f2a22;
+  --text-muted: #6d7268;
+  --muted: #6d7268;
+  --muted-strong: #45503f;
+  --primary: #1f4a3d;
+  --primary-hover: #17392f;
+  --primary-strong: #123028;
+  --accent: #a8842c;
+  --accent-soft: #f4ecd9;
+  --danger: #b3382c;
+  --success: #3d7a4f;
+  --warning: #b07a1e;
+  --overlay-strong: rgba(22, 28, 22, 0.62);
+  --shadow-sm: 0 1px 3px rgba(58, 50, 30, 0.08), 0 1px 2px rgba(58, 50, 30, 0.05);
+  --shadow-md: 0 4px 8px -1px rgba(58, 50, 30, 0.10), 0 2px 4px -1px rgba(58, 50, 30, 0.06);
+  --shadow-lg: 0 20px 28px -6px rgba(58, 50, 30, 0.13), 0 10px 12px -5px rgba(58, 50, 30, 0.06);
+  --shadow-xl: 0 25px 50px -12px rgba(40, 34, 18, 0.28);
+  --shadow-glow: 0 0 20px rgba(168, 132, 44, 0.16), 0 8px 24px rgba(31, 74, 61, 0.12);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+}
+
+:root[data-skin='vault'][data-theme='dark'] {
+  --bg-accent: #0c1512;
+  --panel: #14201b;
+  --panel-soft: #101a16;
+  --panel-muted: #0d1613;
+  --panel-subtle: #182620;
+  --surface: #14201b;
+  --line: rgba(190, 180, 140, 0.17);
+  --line-soft: rgba(190, 180, 140, 0.09);
+  --text: #ece7da;
+  --text-muted: #9aa294;
+  --muted: #9aa294;
+  --muted-strong: #c4c9bb;
+  --primary: #7fb59a;
+  --primary-hover: #98c7ae;
+  --primary-strong: #b7d8c5;
+  --accent: #d3b264;
+  --accent-soft: rgba(211, 178, 100, 0.12);
+  --danger: #e08578;
+  --success: #7fc08f;
+  --warning: #d9a94e;
+  --overlay-strong: rgba(0, 0, 0, 0.76);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.42), 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.46), 0 2px 4px -1px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.52), 0 10px 10px -5px rgba(0, 0, 0, 0.42);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.62);
+  --shadow-glow: 0 0 20px rgba(211, 178, 100, 0.18), 0 8px 24px rgba(127, 181, 154, 0.14);
+}
+
+/* Serif display voice. Element selectors + .brand only — stable across
+   upstream markup changes. */
+:root[data-skin='vault'] h1,
+:root[data-skin='vault'] h2,
+:root[data-skin='vault'] h3,
+:root[data-skin='vault'] h4,
+:root[data-skin='vault'] .brand {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  letter-spacing: 0.01em;
+}

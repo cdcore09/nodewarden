@@ -5,6 +5,7 @@ import { initI18n } from './lib/i18n';
 import { registerNodeWardenServiceWorker } from './lib/pwa';
 import './tailwind.css';
 import './styles.css';
+import './lib/skin';
 
 const queryClient = new QueryClient({
   defaultOptions: {
