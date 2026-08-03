@@ -1464,4 +1464,19 @@ Object.assign(it, { "txt_password_security_last_checked": "Ultimo controllo: {va
 Object.assign(it, { "txt_no_password_risks_in_filter": "Nessun rischio password in questa categoria" });
 Object.assign(it, { "txt_password_security_show_all": "Show all", "txt_password_security_hide_all": "Hide all", "txt_password_security_jump": "Go to item", "txt_password_security_exposed_short": "Exposed {count} times", "txt_password_security_weak_short": "Weak password", "txt_password_security_reused_short": "Reused" });
 
+Object.assign(it, {
+  "txt_org_page_title": "Organizations",
+  "txt_org_new_button": "New organization",
+  "txt_org_role_owner": "Owner",
+  "txt_org_role_member": "Member",
+  "txt_org_empty": "No organizations yet",
+  "txt_org_dialog_title": "New organization",
+  "txt_org_dialog_message": "Give your organization a name. You can invite members and add collections after it's created.",
+  "txt_org_name_placeholder": "Acme Inc.",
+  "txt_org_creating": "Creating…",
+  "txt_org_missing_encryption_key": "Your account is missing an encryption key. Sign out and back in, then try again.",
+  "txt_org_create_failed": "Failed to create organization",
+  "txt_org_created": "\"{name}\" was created."
+});
+
 export default it;

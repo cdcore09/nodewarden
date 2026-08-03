@@ -22,7 +22,7 @@ function getProfileOrganizations(profile: Profile): ProfileOrganization[] {
 }
 
 function organizationRoleLabel(type: number): string {
-  return type === ORGANIZATION_TYPE_OWNER ? 'Owner' : 'Member';
+  return type === ORGANIZATION_TYPE_OWNER ? t('txt_org_role_owner') : t('txt_org_role_member');
 }
 
 export default function OrganizationsPage(props: OrganizationsPageProps) {
@@ -50,7 +50,7 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
     try {
       const userPublicKey = props.profile.publicKey;
       if (!userPublicKey) {
-        throw new Error('Your account is missing an encryption key. Sign out and back in, then try again.');
+        throw new Error(t('txt_org_missing_encryption_key'));
       }
 
       const keys = await generateOrgKeys(userPublicKey);
@@ -62,13 +62,13 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
       };
       await props.onCreateOrganization(input);
 
-      props.onNotify?.('success', `"${trimmedName}" was created.`);
+      props.onNotify?.('success', t('txt_org_created', { name: trimmedName }));
       setDialogOpen(false);
       setName('');
     } catch (error) {
       const message = error instanceof WebCryptoUnavailableError
         ? t('txt_web_crypto_unavailable')
-        : error instanceof Error ? error.message : 'Failed to create organization';
+        : error instanceof Error ? error.message : t('txt_org_create_failed');
       props.onNotify?.('error', message);
     } finally {
       setSubmitting(false);
@@ -79,30 +79,30 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
     <div className="stack">
       <section className="card">
         <div className="section-head">
-          <h3>Organizations</h3>
+          <h3>{t('txt_org_page_title')}</h3>
           <button type="button" className="btn btn-primary small" onClick={openCreateDialog}>
             <Plus size={14} className="btn-icon" />
-            New organization
+            {t('txt_org_new_button')}
           </button>
         </div>
         <table className="table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Role</th>
+              <th>{t('txt_name')}</th>
+              <th>{t('txt_role')}</th>
             </tr>
           </thead>
           <tbody>
             {organizations.map((organization) => (
               <tr key={organization.id}>
-                <td data-label="Name">{organization.name}</td>
-                <td data-label="Role">{organizationRoleLabel(organization.type)}</td>
+                <td data-label={t('txt_name')}>{organization.name}</td>
+                <td data-label={t('txt_role')}>{organizationRoleLabel(organization.type)}</td>
               </tr>
             ))}
             {!organizations.length && (
               <tr>
                 <td colSpan={2}>
-                  <div className="empty empty-comfortable">No organizations yet</div>
+                  <div className="empty empty-comfortable">{t('txt_org_empty')}</div>
                 </td>
               </tr>
             )}
@@ -112,9 +112,9 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
 
       <ConfirmDialog
         open={dialogOpen}
-        title="New organization"
-        message="Give your organization a name. You can invite members and add collections after it's created."
-        confirmText={submitting ? 'Creating…' : t('txt_create')}
+        title={t('txt_org_dialog_title')}
+        message={t('txt_org_dialog_message')}
+        confirmText={submitting ? t('txt_org_creating') : t('txt_create')}
         cancelText={t('txt_cancel')}
         confirmDisabled={submitting || !name.trim()}
         cancelDisabled={submitting}
@@ -127,7 +127,7 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
             className="input"
             maxLength={128}
             value={name}
-            placeholder="Acme Inc."
+            placeholder={t('txt_org_name_placeholder')}
             onInput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
           />
         </label>
