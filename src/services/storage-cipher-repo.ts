@@ -99,8 +99,12 @@ function parseCipherRow(row: CipherRow | null | undefined): Cipher | null {
   }
 }
 
-function selectCipherColumns(): string {
-  return 'id, user_id, organization_id, type, folder_id, name, notes, favorite, data, reprompt, key, created_at, updated_at, archived_at, deleted_at';
+function selectCipherColumns(alias = ''): string {
+  const prefix = alias ? `${alias}.` : '';
+  return [
+    'id', 'user_id', 'organization_id', 'type', 'folder_id', 'name', 'notes',
+    'favorite', 'data', 'reprompt', 'key', 'created_at', 'updated_at', 'archived_at', 'deleted_at',
+  ].map((col) => `${prefix}${col}`).join(', ');
 }
 
 export async function getCipher(db: D1Database, id: string): Promise<Cipher | null> {
@@ -240,15 +244,86 @@ export async function bulkDeleteCiphers(
   return updateRevisionDate(userId);
 }
 
+// Personal-vault filter: only ciphers the user owns directly, never ciphers
+// that belong to an organization. Org ciphers are fetched separately via
+// getOrgCiphersForOwner / getOrgCiphersForMember (see getAccessibleOrgCiphers
+// in storage.ts), which apply org-membership and collection-grant access
+// control instead of the simple user_id ownership check used here.
 export async function getAllCiphers(db: D1Database, userId: string): Promise<Cipher[]> {
   const res = await db
-    .prepare(`SELECT ${selectCipherColumns()} FROM ciphers WHERE user_id = ? ORDER BY updated_at DESC`)
+    .prepare(`SELECT ${selectCipherColumns()} FROM ciphers WHERE user_id = ? AND organization_id IS NULL ORDER BY updated_at DESC`)
     .bind(userId)
     .all<CipherRow>();
   return (res.results || []).flatMap((row) => {
     const cipher = parseCipherRow(row);
     return cipher ? [cipher] : [];
   });
+}
+
+// Every cipher belonging to an org, for an org OWNER — owners implicitly see
+// everything regardless of collection grants.
+export async function getOrgCiphersForOwner(db: D1Database, orgId: string): Promise<Cipher[]> {
+  const res = await db
+    .prepare(`SELECT ${selectCipherColumns()} FROM ciphers WHERE organization_id = ? ORDER BY updated_at DESC`)
+    .bind(orgId)
+    .all<CipherRow>();
+  return (res.results || []).flatMap((row) => {
+    const cipher = parseCipherRow(row);
+    return cipher ? [cipher] : [];
+  });
+}
+
+// Ciphers a non-owner member may read: only those living in a collection the
+// member's org_user_id has been explicitly granted. SECURITY-RELEVANT: this
+// join is what enforces collection-scoped access for members — it must go
+// through collection_users on the caller-supplied org_user_id, and callers
+// must only pass a CONFIRMED membership's org_user_id (an invited/accepted
+// row must never reach this query with intent to grant access).
+export async function getOrgCiphersForMember(db: D1Database, orgUserId: string): Promise<Cipher[]> {
+  const res = await db
+    .prepare(
+      `SELECT DISTINCT ${selectCipherColumns('c')}
+       FROM ciphers c
+       JOIN cipher_collections cc ON cc.cipher_id = c.id
+       JOIN collection_users cu ON cu.collection_id = cc.collection_id
+       WHERE cu.org_user_id = ?
+       ORDER BY c.updated_at DESC`
+    )
+    .bind(orgUserId)
+    .all<CipherRow>();
+  return (res.results || []).flatMap((row) => {
+    const cipher = parseCipherRow(row);
+    return cipher ? [cipher] : [];
+  });
+}
+
+// One query, grouping cipher_collections by cipher_id, so callers can attach
+// `collectionIds` onto each org cipher before it reaches cipherToResponse()
+// (which reads collectionIds off the cipher object).
+export async function getCollectionIdsForCiphers(
+  db: D1Database,
+  sqlChunkSize: SqlChunkSize,
+  cipherIds: string[]
+): Promise<Map<string, string[]>> {
+  const grouped = new Map<string, string[]>();
+  const uniqueIds = sanitizeIds(cipherIds);
+  if (!uniqueIds.length) return grouped;
+
+  const chunkSize = sqlChunkSize(0);
+  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+    const chunk = uniqueIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    const res = await db
+      .prepare(`SELECT cipher_id, collection_id FROM cipher_collections WHERE cipher_id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ cipher_id: string; collection_id: string }>();
+    for (const row of res.results || []) {
+      const list = grouped.get(row.cipher_id) || [];
+      list.push(row.collection_id);
+      grouped.set(row.cipher_id, list);
+    }
+  }
+  return grouped;
 }
 
 export async function getCiphersPage(

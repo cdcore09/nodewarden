@@ -89,6 +89,9 @@ import {
   getCipherForUser as findStoredCipherForUser,
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
+  getOrgCiphersForOwner as listStoredOrgCiphersForOwner,
+  getOrgCiphersForMember as listStoredOrgCiphersForMember,
+  getCollectionIdsForCiphers as listStoredCollectionIdsForCiphers,
   saveCipher as saveStoredCipher,
   deleteCipher as deleteStoredCipher,
 } from './storage-cipher-repo';
@@ -566,6 +569,40 @@ export class StorageService {
 
   async bulkMoveCiphers(ids: string[], folderId: string | null, userId: string): Promise<string | null> {
     return moveStoredCiphers(this.db, this.sqlChunkSize.bind(this), this.updateRevisionDate.bind(this), ids, folderId, userId);
+  }
+
+  // Org ciphers the user may read, across every org they belong to.
+  // Owners see every cipher in the org; non-owner members see only ciphers
+  // in collections they've been granted (only CONFIRMED memberships count —
+  // invited/accepted rows grant nothing). Each returned cipher carries
+  // `collectionIds` so cipherToResponse() (which reads it off the cipher
+  // object) renders correctly.
+  async getAccessibleOrgCiphers(userId: string): Promise<Cipher[]> {
+    const memberships = await listStoredMembershipsForUser(this.db, userId);
+    const byId = new Map<string, Cipher>();
+
+    for (const membership of memberships) {
+      if (membership.orgUser.status !== 'confirmed') continue;
+      const orgCiphers = membership.orgUser.role === 'owner'
+        ? await listStoredOrgCiphersForOwner(this.db, membership.orgUser.orgId)
+        : await listStoredOrgCiphersForMember(this.db, membership.orgUser.id);
+      for (const cipher of orgCiphers) {
+        byId.set(cipher.id, cipher);
+      }
+    }
+
+    const ciphers = Array.from(byId.values());
+    if (ciphers.length === 0) return ciphers;
+
+    const collectionIdsByCipher = await listStoredCollectionIdsForCiphers(
+      this.db,
+      this.sqlChunkSize.bind(this),
+      ciphers.map((c) => c.id)
+    );
+    return ciphers.map((cipher) => ({
+      ...cipher,
+      collectionIds: collectionIdsByCipher.get(cipher.id) || [],
+    }));
   }
 
   // --- Folders ---
