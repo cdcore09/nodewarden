@@ -1046,7 +1046,17 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   const requestedOrganizationId = normalizeOptionalId(
     createOrganizationId.present ? createOrganizationId.value : null
   );
-  const createCollectionIds = readCipherProp<string[] | null>(cipherData, ['collectionIds', 'CollectionIds']);
+  // SECURITY/CORRECTNESS: collectionIds lives at the TOP LEVEL of the request
+  // body ({ cipher: {...}, collectionIds: [...] }), never nested inside the
+  // cipher object itself -- matching handleShareCipher's already-correct
+  // `readCipherProp(body, [...])` read (see ~line 1303). When the client
+  // sends the unwrapped shape (no `cipher`/`Cipher` wrapper), cipherData ===
+  // body anyway, so reading from `body` is correct in both cases. Reading
+  // from `cipherData` here previously silently dropped collectionIds
+  // whenever the client used the wrapped shape (the shape official Bitwarden
+  // clients actually send), leaving the org cipher created but unassigned to
+  // any collection -- unreachable to every non-owner member.
+  const createCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
   const requestedCollectionIds = Array.isArray(createCollectionIds.value)
     ? Array.from(new Set(createCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
     : [];
