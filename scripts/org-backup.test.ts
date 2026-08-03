@@ -1,9 +1,46 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { zipSync } from 'fflate';
 import { createTestDb } from './test-db';
 import { buildBackupArchive } from '../src/services/backup-archive';
 import { importBackupArchiveBytes } from '../src/services/backup-import';
 import type { Env } from '../src/types';
+
+function craftedArchiveBytes(db: Record<string, unknown[]>): Uint8Array {
+  const encoder = new TextEncoder();
+  return zipSync({
+    'manifest.json': encoder.encode(JSON.stringify({
+      formatVersion: 1,
+      exportedAt: '2026-08-01T00:00:00.000Z',
+      appVersion: 'test',
+      storageKind: null,
+      tableCounts: {},
+      includes: { attachments: false },
+      blobSummary: { attachmentFiles: 0, totalBytes: 0, largestObjectBytes: 0 },
+      attachmentBlobs: [],
+    })),
+    'db.json': encoder.encode(JSON.stringify(db)),
+  }, { level: 0 });
+}
+
+function emptyCraftedDb(extra: Record<string, unknown[]> = {}): Record<string, unknown[]> {
+  return {
+    config: [],
+    users: [],
+    domain_settings: [],
+    user_revisions: [],
+    folders: [],
+    ciphers: [],
+    attachments: [],
+    webauthn_credentials: [],
+    organizations: [],
+    organization_users: [],
+    collections: [],
+    collection_users: [],
+    cipher_collections: [],
+    ...extra,
+  };
+}
 
 test('org tables round-trip through backup export/import', async () => {
   const source = createTestDb();
@@ -118,4 +155,43 @@ test('import without replaceExisting is rejected when target already has organiz
   // The pre-existing org data must survive the rejected import untouched.
   const survivingOrgs = await target.prepare('SELECT id FROM organizations').all<any>();
   assert.equal((survivingOrgs.results || []).length, 1);
+});
+
+test('import is rejected when a cipher references an organization id absent from the payload', async () => {
+  const now = '2026-08-01T00:00:00.000Z';
+  const bytes = craftedArchiveBytes(emptyCraftedDb({
+    users: [{ id: 'u1', email: 'a@b.c', master_password_hash: 'h', key: 'k', kdf_type: 0, kdf_iterations: 600000, security_stamp: 's', role: 'user', status: 'active', created_at: now, updated_at: now }],
+    // organizations is intentionally empty: 'missing-org' is not present.
+    ciphers: [{ id: 'cph1', user_id: 'u1', organization_id: 'missing-org', type: 1, folder_id: null, name: '2.cipherName', notes: null, favorite: 0, data: '{}', reprompt: 0, key: null, created_at: now, updated_at: now, archived_at: null, deleted_at: null }],
+  }));
+
+  const target = createTestDb();
+  const targetEnv = { DB: target } as unknown as Env;
+  await assert.rejects(
+    () => importBackupArchiveBytes(bytes, targetEnv, 'u1', false, undefined, 'crafted.zip'),
+    (error: unknown) => error instanceof Error && error.message === 'Backup archive contains a cipher for an unknown organization: missing-org'
+  );
+});
+
+test('import accepts a cipher with a valid organization reference and a cipher with a null organization', async () => {
+  const now = '2026-08-01T00:00:00.000Z';
+  const bytes = craftedArchiveBytes(emptyCraftedDb({
+    users: [{ id: 'u1', email: 'a@b.c', master_password_hash: 'h', key: 'k', kdf_type: 0, kdf_iterations: 600000, security_stamp: 's', role: 'user', status: 'active', created_at: now, updated_at: now }],
+    organizations: [{ id: 'o1', name: '2.n', public_key: 'pub', encrypted_private_key: '2.priv', created_at: now, updated_at: now }],
+    ciphers: [
+      { id: 'cph1', user_id: 'u1', organization_id: 'o1', type: 1, folder_id: null, name: '2.cipherName', notes: null, favorite: 0, data: '{}', reprompt: 0, key: null, created_at: now, updated_at: now, archived_at: null, deleted_at: null },
+      { id: 'cph2', user_id: 'u1', organization_id: null, type: 1, folder_id: null, name: '2.cipherName2', notes: null, favorite: 0, data: '{}', reprompt: 0, key: null, created_at: now, updated_at: now, archived_at: null, deleted_at: null },
+    ],
+  }));
+
+  const target = createTestDb();
+  const targetEnv = { DB: target } as unknown as Env;
+  const importResult = await importBackupArchiveBytes(bytes, targetEnv, 'u1', false, undefined, 'crafted.zip');
+
+  assert.equal(importResult.result.imported.ciphers, 2);
+  const restoredCiphers = await target.prepare('SELECT id, organization_id FROM ciphers ORDER BY id ASC').all<any>();
+  assert.deepEqual((restoredCiphers.results || []).map((row: any) => ({ ...row })), [
+    { id: 'cph1', organization_id: 'o1' },
+    { id: 'cph2', organization_id: null },
+  ]);
 });

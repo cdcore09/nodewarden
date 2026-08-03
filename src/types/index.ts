@@ -253,6 +253,7 @@ export interface PasswordHistory {
 export interface Cipher {
   id: string;
   userId: string;
+  organizationId: string | null;
   type: CipherType;
   folderId: string | null;
   name: string | null;

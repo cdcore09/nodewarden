@@ -494,9 +494,13 @@ export function validateBackupPayloadContents(
     const id = String(row.id || '').trim();
     const userId = String(row.user_id || '').trim();
     const folderId = String(row.folder_id || '').trim();
+    const organizationId = String(row.organization_id || '').trim();
     if (!id || !userIds.has(userId)) throw new Error('Backup archive contains an invalid cipher row');
     if (folderId && !folderIds.has(folderId)) {
       throw new Error(`Backup archive contains a cipher for an unknown folder: ${folderId}`);
+    }
+    if (organizationId && !organizationIds.has(organizationId)) {
+      throw new Error(`Backup archive contains a cipher for an unknown organization: ${organizationId}`);
     }
     if (cipherIds.has(id)) throw new Error(`Backup archive contains duplicate cipher id: ${id}`);
     cipherIds.add(id);

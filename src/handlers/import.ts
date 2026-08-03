@@ -200,6 +200,8 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
       ...c,
       id: generateUUID(),
       userId: userId,
+      // Personal vault import: imported ciphers are never organization-owned.
+      organizationId: null,
       type: c.type as CipherType,
       folderId: folderId,
       name: c.name ?? 'Untitled',

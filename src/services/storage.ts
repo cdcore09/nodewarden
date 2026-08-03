@@ -89,8 +89,14 @@ import {
   getCipherForUser as findStoredCipherForUser,
   getCiphersByIds as listStoredCiphersByIds,
   getCiphersPage as listStoredCiphersPage,
+  getOrgCiphersForOwner as listStoredOrgCiphersForOwner,
+  getOrgCiphersForMember as listStoredOrgCiphersForMember,
+  getCollectionIdsForCiphers as listStoredCollectionIdsForCiphers,
   saveCipher as saveStoredCipher,
   deleteCipher as deleteStoredCipher,
+  deleteOrgCiphers as deleteStoredOrgCiphers,
+  getOrgCipherIds as listStoredOrgCipherIds,
+  countOrgCiphersByCreator as countStoredOrgCiphersByCreator,
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
@@ -532,6 +538,19 @@ export class StorageService {
     await deleteStoredCipher(this.db, id, userId);
   }
 
+  // Org-delete cleanup (Task 8): ciphers.organization_id has no FK, so the
+  // organizations row's cascade never reaches ciphers — callers must purge
+  // an org's ciphers explicitly. See storage-cipher-repo.deleteOrgCiphers.
+  async deleteOrgCiphers(orgId: string): Promise<void> {
+    await deleteStoredOrgCiphers(this.db, orgId);
+  }
+
+  // Bare cipher ids for an org, for cleanup paths (e.g. enumerating
+  // attachment blob keys before org delete). See getOrgCipherIds.
+  async getOrgCipherIds(orgId: string): Promise<string[]> {
+    return listStoredOrgCipherIds(this.db, orgId);
+  }
+
   async bulkSoftDeleteCiphers(ids: string[], userId: string): Promise<string | null> {
     return softDeleteStoredCiphers(this.db, this.sqlChunkSize.bind(this), this.updateRevisionDate.bind(this), ids, userId);
   }
@@ -560,12 +579,50 @@ export class StorageService {
     return listStoredCiphersPage(this.db, userId, includeDeleted, limit, offset);
   }
 
+  async countOrgCiphersByCreator(userId: string): Promise<number> {
+    return countStoredOrgCiphersByCreator(this.db, userId);
+  }
+
   async getCiphersByIds(ids: string[], userId: string): Promise<Cipher[]> {
     return listStoredCiphersByIds(this.db, this.sqlChunkSize.bind(this), ids, userId);
   }
 
   async bulkMoveCiphers(ids: string[], folderId: string | null, userId: string): Promise<string | null> {
     return moveStoredCiphers(this.db, this.sqlChunkSize.bind(this), this.updateRevisionDate.bind(this), ids, folderId, userId);
+  }
+
+  // Org ciphers the user may read, across every org they belong to.
+  // Owners see every cipher in the org; non-owner members see only ciphers
+  // in collections they've been granted (only CONFIRMED memberships count —
+  // invited/accepted rows grant nothing). Each returned cipher carries
+  // `collectionIds` so cipherToResponse() (which reads it off the cipher
+  // object) renders correctly.
+  async getAccessibleOrgCiphers(userId: string): Promise<Cipher[]> {
+    const memberships = await listStoredMembershipsForUser(this.db, userId);
+    const byId = new Map<string, Cipher>();
+
+    for (const membership of memberships) {
+      if (membership.orgUser.status !== 'confirmed') continue;
+      const orgCiphers = membership.orgUser.role === 'owner'
+        ? await listStoredOrgCiphersForOwner(this.db, membership.orgUser.orgId)
+        : await listStoredOrgCiphersForMember(this.db, membership.orgUser.id, membership.orgUser.orgId);
+      for (const cipher of orgCiphers) {
+        byId.set(cipher.id, cipher);
+      }
+    }
+
+    const ciphers = Array.from(byId.values());
+    if (ciphers.length === 0) return ciphers;
+
+    const collectionIdsByCipher = await listStoredCollectionIdsForCiphers(
+      this.db,
+      this.sqlChunkSize.bind(this),
+      ciphers.map((c) => c.id)
+    );
+    return ciphers.map((cipher) => ({
+      ...cipher,
+      collectionIds: collectionIdsByCipher.get(cipher.id) || [],
+    }));
   }
 
   // --- Folders ---

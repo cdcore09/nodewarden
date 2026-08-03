@@ -15,10 +15,47 @@ import {
   parseCollectionGrantsRequest,
   collectionResponse,
   collectionListResponse,
+  collectionDetailsResponse,
 } from './org-shapes';
 
 const ORG_NOT_FOUND = 'Organization not found';
 const COLLECTION_NOT_FOUND = 'Collection not found';
+
+// Collections visible to a given user across every org they belong to: owners
+// see every collection in their org (readOnly=false, hidePasswords=false);
+// confirmed members see only what's been granted to them, with the grant's
+// own flags. Invited/unconfirmed memberships are excluded, mirroring
+// loadProfileOrgs. Shared by /api/sync (sync.ts) and GET /api/collections
+// (handleListAllCollections below) so the two surfaces never drift.
+export async function loadAccessibleCollections(
+  storage: StorageService,
+  userId: string
+): Promise<Record<string, unknown>[]> {
+  const memberships = await storage.listMembershipsForUser(userId);
+  const collectionResponses: Record<string, unknown>[] = [];
+  for (const membership of memberships) {
+    if (membership.orgUser.status !== 'confirmed') continue;
+    if (membership.orgUser.role === 'owner') {
+      const orgCollections = await storage.listCollections(membership.orgUser.orgId);
+      for (const collection of orgCollections) {
+        collectionResponses.push(collectionDetailsResponse(collection, false, false));
+      }
+    } else {
+      const collectionsWithGrant = await storage.listCollectionsForMember(membership.orgUser.id);
+      for (const cwg of collectionsWithGrant) {
+        collectionResponses.push(collectionDetailsResponse(cwg.collection, cwg.readOnly, cwg.hidePasswords));
+      }
+    }
+  }
+  return collectionResponses;
+}
+
+// GET /api/collections
+export async function handleListAllCollections(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const collections = await loadAccessibleCollections(storage, userId);
+  return jsonResponse(collectionListResponse(collections));
+}
 
 async function writeCollectionAudit(
   storage: StorageService,

@@ -43,6 +43,7 @@ import {
   handleBulkRestoreCiphers,
   handleArchiveCipher,
   handleUnarchiveCipher,
+  handleShareCipher,
 } from './handlers/ciphers';
 import {
   handleGetFolders,
@@ -119,6 +120,7 @@ import {
   handleDeleteCollection,
   handleGetCollectionUsers,
   handlePutCollectionUsers,
+  handleListAllCollections,
 } from './handlers/org-collections';
 
 export async function handleAuthenticatedRoute(
@@ -362,7 +364,7 @@ export async function handleAuthenticatedRoute(
     if (subPath === '/archive' && (method === 'PUT' || method === 'POST')) return handleArchiveCipher(request, env, userId, cipherId);
     if (subPath === '/unarchive' && (method === 'PUT' || method === 'POST')) return handleUnarchiveCipher(request, env, userId, cipherId);
     if (subPath === '/partial' && (method === 'PUT' || method === 'POST')) return handlePartialUpdateCipher(request, env, userId, cipherId);
-    if (subPath === '/share' && method === 'POST') return handleGetCipher(request, env, userId, cipherId);
+    if (subPath === '/share' && method === 'POST') return handleShareCipher(request, env, userId, cipherId);
     if (subPath === '/details' && method === 'GET') return handleGetCipher(request, env, userId, cipherId);
     if (subPath === '/attachment/v2' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
     if (subPath === '/attachment' && method === 'POST') return handleCreateAttachment(request, env, userId, cipherId);
@@ -428,7 +430,7 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/collections' || path.startsWith('/api/collections/')) {
     if (method === 'GET') {
-      return jsonResponse({ data: [], object: 'list', continuationToken: null });
+      return handleListAllCollections(request, env, userId);
     }
     return null;
   }

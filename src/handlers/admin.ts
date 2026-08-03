@@ -423,6 +423,15 @@ export async function handleAdminDeleteUser(
     return errorResponse('Cannot delete a user who owns organizations. Delete their organizations first.', 400);
   }
 
+  // ciphers.user_id is ON DELETE CASCADE. A non-owner member can still have
+  // created shared org ciphers -- deleting them would cascade-delete those
+  // ciphers (and their blobs) for every remaining org member, not just the
+  // target user. Refuse rather than silently destroying shared org data.
+  const orgCipherCount = await storage.countOrgCiphersByCreator(target.id);
+  if (orgCipherCount > 0) {
+    return errorResponse('Cannot delete a user who has created organization items. Reassign or delete those items first.', 400);
+  }
+
   // Clean up R2 files before DB cascade deletes the metadata rows.
   // 1. Attachment files (keyed by cipherId/attachmentId)
   const attachmentMap = await storage.getAttachmentsByUserId(target.id);

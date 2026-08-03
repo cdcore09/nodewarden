@@ -12,8 +12,10 @@ import {
   CipherPassport,
   Attachment,
   PasswordHistory,
+  OrganizationUser,
 } from '../types';
 import { StorageService } from '../services/storage';
+import { canReadCipher, canWriteCipher } from '../services/org-access';
 import {
   notifyUserCipherCreate,
   notifyUserCipherDelete,
@@ -27,6 +29,7 @@ import { deleteAllAttachmentsForCipher, deleteAllAttachmentsForCiphers } from '.
 import { parsePagination, encodeContinuationToken } from '../utils/pagination';
 import { readActingDeviceIdentifier } from '../utils/device';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
+import { bumpAndNotifyMembers } from './org-users';
 
 // CONTRACT:
 // Cipher JSON is the highest-risk Bitwarden compatibility surface. Preserve
@@ -81,6 +84,31 @@ function notifyVaultSyncForRequest(
   revisionDate: string
 ): void {
   notifyUserVaultSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+}
+
+// When an org cipher is created/updated/deleted/restored/archived, every
+// CONFIRMED member of that org (not just the acting user) needs their sync
+// revision bumped and pushed, or their client keeps showing stale vault
+// state after a teammate's edit. Reuses org-users.ts's bumpAndNotifyMembers
+// (already used by the collection/member-management handlers for the same
+// "notify the whole org" shape). Dedupes orgIds so a bulk op touching many
+// ciphers in the same org only bumps that org once. This is IN ADDITION to
+// the existing acting-user notify — the acting user may be bumped/notified
+// twice (once via their personal notify, once via this org fan-out); that's
+// harmless, just two pushes for the one client that's already up to date.
+async function notifyOrgCipherChange(
+  env: Env,
+  storage: StorageService,
+  orgIds: Iterable<string | null | undefined>,
+  contextId: string | null
+): Promise<void> {
+  const uniqueOrgIds = new Set<string>();
+  for (const orgId of orgIds) {
+    if (orgId) uniqueOrgIds.add(orgId);
+  }
+  for (const orgId of uniqueOrgIds) {
+    await bumpAndNotifyMembers(env, storage, orgId, contextId);
+  }
 }
 
 function notifyCipherCreateForRequest(
@@ -916,9 +944,9 @@ export async function handleGetCiphers(request: Request, env: Env, userId: strin
 // GET /api/ciphers/:id
 export async function handleGetCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canReadCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -933,6 +961,56 @@ async function verifyFolderOwnership(storage: StorageService, folderId: string |
   if (!folderId) return true;
   const folder = await storage.getFolderForUser(folderId, userId);
   return !!folder;
+}
+
+// SECURITY (Task 1 review finding, reused by Task 6's share endpoint): any
+// handler that lets a client attach an org cipher to a set of collections
+// must validate, before persisting anything, that (a) the requester is a
+// CONFIRMED member of the target org, and (b) for every target collection:
+// it actually belongs to that org, and the requester can write to it (org
+// owners can write everywhere -- sole-admin model; non-owner members need a
+// non-read-only grant on every target collection). A stranger to org Y must
+// never be able to make org-Y-owned data, and a member must never be able to
+// smuggle a cipher into a collection they can't write (or one from a
+// different org entirely). Single-sourced here so handleCreateCipher and
+// handleShareCipher can't drift out of sync on this logic.
+async function requireOrgCipherWriteAccess(
+  storage: StorageService,
+  userId: string,
+  organizationId: string,
+  collectionIds: string[]
+): Promise<{ orgUser: OrganizationUser } | { errorResponse: Response }> {
+  const orgUser = await storage.getOrgUserByOrgAndUser(organizationId, userId);
+  if (!orgUser || orgUser.status !== 'confirmed') {
+    return { errorResponse: errorResponse('Cipher not found', 404) };
+  }
+
+  if (collectionIds.length > 0) {
+    const collections = await Promise.all(
+      collectionIds.map((cid) => storage.getCollection(cid))
+    );
+    for (const collection of collections) {
+      if (!collection || collection.orgId !== organizationId) {
+        return { errorResponse: errorResponse('Invalid collection', 400) };
+      }
+    }
+
+    // Owners always have write access to every collection in their org
+    // (sole-admin model). Non-owner members need a non-read-only grant on
+    // every target collection.
+    if (orgUser.role !== 'owner') {
+      const memberCollections = await storage.listCollectionsForMember(orgUser.id);
+      const writableCollectionIds = new Set(
+        memberCollections.filter((entry) => !entry.readOnly).map((entry) => entry.collection.id)
+      );
+      const canWriteAllTargets = collectionIds.every((cid) => writableCollectionIds.has(cid));
+      if (!canWriteAllTargets) {
+        return { errorResponse: errorResponse('Insufficient collection permissions', 403) };
+      }
+    }
+  }
+
+  return { orgUser };
 }
 
 // POST /api/ciphers
@@ -960,6 +1038,28 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   const createDriversLicense = readCipherProp<CipherDriversLicense | null>(cipherData, ['driversLicense', 'DriversLicense']);
   const createPassport = readCipherProp<CipherPassport | null>(cipherData, ['passport', 'Passport']);
   const createPasswordHistory = readCipherProp<PasswordHistory[] | null>(cipherData, ['passwordHistory', 'PasswordHistory']);
+  // SECURITY: organizationId/collectionIds are client-supplied input on create.
+  // If unvalidated, a user with no membership in org Y could POST
+  // {organizationId: "org-Y"} and have it persist as an org-Y cipher (Task 1
+  // review finding). Read the intent here; validate below before persisting.
+  const createOrganizationId = readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']);
+  const requestedOrganizationId = normalizeOptionalId(
+    createOrganizationId.present ? createOrganizationId.value : null
+  );
+  // SECURITY/CORRECTNESS: collectionIds lives at the TOP LEVEL of the request
+  // body ({ cipher: {...}, collectionIds: [...] }), never nested inside the
+  // cipher object itself -- matching handleShareCipher's already-correct
+  // `readCipherProp(body, [...])` read (see ~line 1303). When the client
+  // sends the unwrapped shape (no `cipher`/`Cipher` wrapper), cipherData ===
+  // body anyway, so reading from `body` is correct in both cases. Reading
+  // from `cipherData` here previously silently dropped collectionIds
+  // whenever the client used the wrapped shape (the shape official Bitwarden
+  // clients actually send), leaving the org cipher created but unassigned to
+  // any collection -- unreachable to every non-owner member.
+  const createCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const requestedCollectionIds = Array.isArray(createCollectionIds.value)
+    ? Array.from(new Set(createCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
+    : [];
 
   if (createKey.present && !shouldAcceptCipherKey(createKey.value)) {
     return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
@@ -973,6 +1073,8 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     // Server-controlled fields (always override client values)
     id: generateUUID(),
     userId: userId,
+    // Validated below, never the raw client value.
+    organizationId: requestedOrganizationId,
     type: Number(cipherData.type) || 1,
     favorite: !!cipherData.favorite,
     reprompt: cipherData.reprompt || 0,
@@ -1004,10 +1106,37 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
+  // SECURITY (Task 1 review finding): a non-null organizationId means this is
+  // an org cipher — validate membership, collection org-consistency, and
+  // write access to every target collection before persisting. A stranger
+  // to org Y must never be able to make org-Y-owned data.
+  if (requestedOrganizationId) {
+    const access = await requireOrgCipherWriteAccess(storage, userId, requestedOrganizationId, requestedCollectionIds);
+    if ('errorResponse' in access) return access.errorResponse;
+
+    // A non-owner member with no target collection would create an org
+    // cipher it immediately can't read or write itself (canRead/canWriteCipher
+    // require a granted collection for non-owners) — only the owner could
+    // ever reach it again. Require at least one target collection for
+    // non-owner creators; owners may create unassigned (owner-bypass gives
+    // them access regardless of collections).
+    if (access.orgUser.role !== 'owner' && requestedCollectionIds.length === 0) {
+      return errorResponse('An organization member must assign the item to at least one collection', 400);
+    }
+
+    cipher.collectionIds = requestedCollectionIds;
+  }
+
   await storage.saveCipher(cipher);
+  if (requestedOrganizationId && requestedCollectionIds.length > 0) {
+    await storage.addCipherToCollections(cipher.id, requestedCollectionIds);
+  }
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherCreateForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
   const responseOptions = cipherResponseOptionsForRequest(request);
 
   return jsonResponse(
@@ -1019,9 +1148,9 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
 // PUT /api/ciphers/:id
 export async function handleUpdateCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const existingCipher = await storage.getCipherForUser(id, userId);
+  const existingCipher = await storage.getCipher(id);
 
-  if (!existingCipher || existingCipher.userId !== userId) {
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1071,6 +1200,10 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
     // Server-controlled fields (never from client)
     id: existingCipher.id,
     userId: existingCipher.userId,
+    // A plain update must NOT be able to move a cipher into/out of/between
+    // orgs — that's the /share endpoint's job. Force it to the existing
+    // value so a spoofed body organizationId is ignored.
+    organizationId: existingCipher.organizationId,
     type: nextType,
     favorite: cipherData.favorite ?? existingCipher.favorite,
     reprompt: cipherData.reprompt ?? existingCipher.reprompt,
@@ -1125,6 +1258,9 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
   const attachments = await storage.getAttachmentsByCipher(cipher.id);
   const responseOptions = cipherResponseOptionsForRequest(request);
 
@@ -1133,12 +1269,179 @@ export async function handleUpdateCipher(request: Request, env: Env, userId: str
   );
 }
 
+// POST /api/ciphers/:id/share
+// Bitwarden's share payload: { cipher: { ...fields, organizationId }, collectionIds: [...] }.
+// Moves a cipher the requester can currently write (typically their own personal
+// cipher) into an org, persisting the client's re-encrypted-under-the-org-key
+// cipher data and assigning it to the given collections. Ownership (user_id, the
+// original creator) is never changed by a share -- only organizationId and
+// collection membership move.
+export async function handleShareCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const existingCipher = await storage.getCipher(id);
+
+  // The requester must be able to write the cipher AS IT STANDS TODAY. For the
+  // common case (a personal cipher, organizationId === null) canWriteCipher
+  // reduces to "you are the owner" -- you can only share what you own.
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
+    return errorResponse('Cipher not found', 404);
+  }
+
+  // SECURITY: Bitwarden's /share only ever moves a PERSONAL cipher into an
+  // org. Reject reshare of a cipher that already belongs to an org (moving
+  // Org A -> Org B). Reshare would move `organization_id` to the new org but
+  // leave the OLD org's `cipher_collections` row behind (addCipherToCollections
+  // only INSERTs the new grant; nothing here deletes the stale one) -- a
+  // cross-tenant leak where Org A members keep seeing a cipher that now
+  // belongs to Org B. getOrgCiphersForMember is hardened as a second,
+  // independent layer against exactly this (see storage-cipher-repo.ts), but
+  // this guard stops the stale row from ever being created in the first place.
+  if (existingCipher.organizationId) {
+    return errorResponse('Cipher already belongs to an organization', 400);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  // Android sends PascalCase "Cipher"/"CollectionIds" for org payloads, matching
+  // the alias convention already used throughout this file.
+  const cipherData = body.Cipher || body.cipher || {};
+  const shareCollectionIds = readCipherProp<string[] | null>(body, ['collectionIds', 'CollectionIds']);
+  const requestedCollectionIds = Array.isArray(shareCollectionIds.value)
+    ? Array.from(new Set(shareCollectionIds.value.map((cid) => String(cid || '').trim()).filter(Boolean)))
+    : [];
+
+  const shareOrganizationId = readCipherProp<string | null>(cipherData, ['organizationId', 'OrganizationId']);
+  const targetOrganizationId = normalizeOptionalId(
+    shareOrganizationId.present ? shareOrganizationId.value : null
+  );
+  // Sharing REQUIRES a target org -- this endpoint's entire purpose is moving
+  // a cipher into one.
+  if (!targetOrganizationId) {
+    return errorResponse('An organization is required to share a cipher.', 400);
+  }
+
+  // An org cipher with no collections would be unreachable to anyone but the
+  // org owner (same invariant Task 3's create-time validation enforces) --
+  // require at least one target collection for every share, regardless of role.
+  if (!requestedCollectionIds.length) {
+    return errorResponse('Invalid collection', 400);
+  }
+
+  // Same chokepoint handleCreateCipher uses for org-cipher validation:
+  // confirmed membership + every collection belongs to the target org + the
+  // requester can write to each one.
+  const access = await requireOrgCipherWriteAccess(storage, userId, targetOrganizationId, requestedCollectionIds);
+  if ('errorResponse' in access) return access.errorResponse;
+
+  const incomingKey = readCipherProp<string | null>(cipherData, ['key', 'Key']);
+  if (incomingKey.present && !shouldAcceptCipherKey(incomingKey.value)) {
+    return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
+  }
+
+  const incomingFolderId = readCipherProp<string | null>(cipherData, ['folderId', 'FolderId']);
+  const incomingLogin = readCipherProp<CipherLogin | null>(cipherData, ['login', 'Login']);
+  const incomingCard = readCipherProp<CipherCard | null>(cipherData, ['card', 'Card']);
+  const incomingIdentity = readCipherProp<CipherIdentity | null>(cipherData, ['identity', 'Identity']);
+  const incomingSecureNote = readCipherProp<CipherSecureNote | null>(cipherData, ['secureNote', 'SecureNote']);
+  const incomingSshKey = readCipherProp<CipherSshKey | null>(cipherData, ['sshKey', 'SshKey']);
+  const incomingBankAccount = readCipherProp<CipherBankAccount | null>(cipherData, ['bankAccount', 'BankAccount']);
+  const incomingDriversLicense = readCipherProp<CipherDriversLicense | null>(cipherData, ['driversLicense', 'DriversLicense']);
+  const incomingPassport = readCipherProp<CipherPassport | null>(cipherData, ['passport', 'Passport']);
+  const incomingPasswordHistory = readCipherProp<PasswordHistory[] | null>(cipherData, ['passwordHistory', 'PasswordHistory']);
+  const nextType = Number(cipherData.type) || existingCipher.type;
+
+  // Opaque passthrough merge (same shape as handleUpdateCipher): start from the
+  // existing stored cipher, overlay the client's re-encrypted fields, then force
+  // the server-controlled fields -- most importantly organizationId (the whole
+  // point of this endpoint) and userId (ownership invariant: sharing never
+  // changes who created the cipher).
+  const cipher: Cipher = {
+    ...existingCipher,
+    ...cipherData,
+    id: existingCipher.id,
+    userId: existingCipher.userId,
+    organizationId: targetOrganizationId,
+    type: nextType,
+    favorite: cipherData.favorite ?? existingCipher.favorite,
+    reprompt: cipherData.reprompt ?? existingCipher.reprompt,
+    createdAt: existingCipher.createdAt,
+    updatedAt: new Date().toISOString(),
+    archivedAt: existingCipher.archivedAt ?? null,
+    deletedAt: existingCipher.deletedAt,
+  };
+  if (incomingFolderId.present) {
+    cipher.folderId = normalizeOptionalId(incomingFolderId.value);
+  }
+  if (incomingKey.present) {
+    const normalizedIncomingKey = normalizeCipherKeyForStorage(incomingKey.value);
+    cipher.key = normalizedIncomingKey || normalizeCipherKeyForStorage(existingCipher.key);
+  } else {
+    cipher.key = normalizeCipherKeyForStorage(existingCipher.key);
+  }
+  cipher.login = nextType === 1 ? (incomingLogin.present ? (incomingLogin.value ?? null) : (existingCipher.login ?? null)) : null;
+  cipher.secureNote = nextType === 2 ? (incomingSecureNote.present ? (incomingSecureNote.value ?? null) : (existingCipher.secureNote ?? null)) : null;
+  cipher.card = nextType === 3 ? (incomingCard.present ? (incomingCard.value ?? null) : (existingCipher.card ?? null)) : null;
+  cipher.identity = nextType === 4 ? (incomingIdentity.present ? (incomingIdentity.value ?? null) : (existingCipher.identity ?? null)) : null;
+  cipher.sshKey = nextType === 5 ? (incomingSshKey.present ? (incomingSshKey.value ?? null) : (existingCipher.sshKey ?? null)) : null;
+  cipher.bankAccount = nextType === 6 ? (incomingBankAccount.present ? (incomingBankAccount.value ?? null) : ((existingCipher as any).bankAccount ?? null)) : null;
+  cipher.driversLicense = nextType === 7 ? (incomingDriversLicense.present ? (incomingDriversLicense.value ?? null) : ((existingCipher as any).driversLicense ?? null)) : null;
+  cipher.passport = nextType === 8 ? (incomingPassport.present ? (incomingPassport.value ?? null) : ((existingCipher as any).passport ?? null)) : null;
+  if (incomingPasswordHistory.present) {
+    cipher.passwordHistory = incomingPasswordHistory.value ?? null;
+  }
+
+  const incomingFields = getAliasedProp(cipherData, ['fields', 'Fields']);
+  if (incomingFields.present) {
+    cipher.fields = incomingFields.value ?? null;
+  }
+
+  cipher.collectionIds = requestedCollectionIds;
+  normalizeCipherForStorage(cipher);
+  const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
+  if (compatibilityError) return errorResponse(compatibilityError, 400);
+
+  // Prevent referencing a folder owned by another user.
+  if (cipher.folderId) {
+    const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
+    if (!folderOk) return errorResponse('Folder not found', 404);
+  }
+
+  await storage.saveCipher(cipher);
+  // Org attachments follow automatically -- they FK to cipher_id, not
+  // organization_id, so no attachment-specific migration is needed here.
+  await storage.addCipherToCollections(cipher.id, requestedCollectionIds);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  // Every confirmed member of the target org (not just the acting user) needs
+  // their sync revision bumped and pushed, or their client won't see the
+  // newly-shared item.
+  await notifyOrgCipherChange(env, storage, [targetOrganizationId], readActingDeviceIdentifier(request));
+
+  await writeCipherAudit(storage, request, userId, 'cipher.share', {
+    id: cipher.id,
+    organizationId: targetOrganizationId,
+    collectionIds: requestedCollectionIds,
+  });
+
+  const attachments = await storage.getAttachmentsByCipher(cipher.id);
+  return jsonResponse(
+    cipherToResponse(cipher, attachments, cipherResponseOptionsForRequest(request))
+  );
+}
+
 // DELETE /api/ciphers/:id
 export async function handleDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1150,6 +1453,9 @@ export async function handleDeleteCipher(request: Request, env: Env, userId: str
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherDeleteForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
   await writeCipherAudit(storage, request, userId, 'cipher.delete.soft', {
     id: cipher.id,
     type: cipher.type,
@@ -1168,18 +1474,26 @@ export async function handleDeleteCipher(request: Request, env: Env, userId: str
 // - If item is already soft-deleted -> hard delete.
 export async function handleDeleteCipherCompat(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
   if (cipher.deletedAt) {
     await deleteAllAttachmentsForCipher(env, id);
-    await storage.deleteCipher(id, userId);
+    // storage.deleteCipher scopes its DELETE by owning user_id — for an org
+    // cipher the actor (userId) may be a confirmed owner/writer who is NOT
+    // the cipher's creator, so this must use the cipher's own owner id, not
+    // the acting user's id, or the row silently survives (0 rows deleted)
+    // while the handler still reports success.
+    await storage.deleteCipher(id, cipher.userId);
     const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyCipherDeleteForRequest(request, env, cipher, revisionDate);
+    if (cipher.organizationId) {
+      await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+    }
     await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent', {
       id,
       type: cipher.type,
@@ -1195,19 +1509,25 @@ export async function handleDeleteCipherCompat(request: Request, env: Env, userI
 // DELETE /api/ciphers/:id (permanent)
 export async function handlePermanentDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
   // Delete all attachments first
   await deleteAllAttachmentsForCipher(env, id);
 
-  await storage.deleteCipher(id, userId);
+  // See handleDeleteCipherCompat: must use the cipher's owner id, not the
+  // acting user's id, so a confirmed org owner/writer permanently deleting
+  // someone else's org cipher actually removes the row.
+  await storage.deleteCipher(id, cipher.userId);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherDeleteForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
   await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent', {
     id,
     type: cipher.type,
@@ -1220,9 +1540,9 @@ export async function handlePermanentDeleteCipher(request: Request, env: Env, us
 // PUT /api/ciphers/:id/restore
 export async function handleRestoreCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1233,6 +1553,9 @@ export async function handleRestoreCipher(request: Request, env: Env, userId: st
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
 
   return jsonResponse(
     cipherToResponse(cipher, [], cipherResponseOptionsForRequest(request))
@@ -1242,9 +1565,9 @@ export async function handleRestoreCipher(request: Request, env: Env, userId: st
 // PUT /api/ciphers/:id/partial - Update only favorite/folderId
 export async function handlePartialUpdateCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1273,10 +1596,63 @@ export async function handlePartialUpdateCipher(request: Request, env: Env, user
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
 
   return jsonResponse(
     cipherToResponse(cipher, [], cipherResponseOptionsForRequest(request))
   );
+}
+
+// Bulk cipher endpoints take a flat id list from the client, but the
+// per-id chokepoint is canWriteCipher(storage, userId, cipher) -- and it
+// needs an actual Cipher, not just an id. storage.getCiphersByIds(ids, userId)
+// can't be used to load them: it's personal-vault scoped (`WHERE user_id = ?`)
+// and will never return an org cipher the caller only has access to via a
+// collection grant. Load each id individually via storage.getCipher(id)
+// (unscoped by owner) instead, then gate it. Ids that don't exist, or that
+// the caller can't write to, are silently dropped from the batch rather than
+// failing the whole request -- this matches Bitwarden's bulk endpoint
+// semantics of "apply to whatever subset you're allowed to touch."
+async function loadAuthorizedCiphersForBulkWrite(
+  storage: StorageService,
+  userId: string,
+  ids: string[]
+): Promise<Cipher[]> {
+  const loaded = await Promise.all(ids.map((id) => storage.getCipher(id)));
+  const authorized: Cipher[] = [];
+  for (const cipher of loaded) {
+    if (cipher && (await canWriteCipher(storage, userId, cipher))) {
+      authorized.push(cipher);
+    }
+  }
+  return authorized;
+}
+
+// The underlying bulk storage mutations (bulkSoftDeleteCiphers,
+// bulkArchiveCiphers, bulkMoveCiphers, ...) filter `WHERE user_id = ? AND id
+// IN (...)`, scoped to whichever userId is passed in -- not to the acting
+// caller. For a personal cipher the owner and the acting caller are the same
+// person, so this is a no-op distinction. But for an org cipher created by a
+// teammate, cipher.userId (the creator) differs from the acting userId (an
+// owner/writer acting via a collection grant); calling the bulk mutation
+// scoped to the ACTING userId would match zero rows and silently no-op on
+// exactly the ciphers this task exists to fix. Group the authorized ciphers
+// by their owning user id and issue one bulk call per owner group instead,
+// so each group's storage call is scoped to the id that actually owns those
+// rows and the mutation lands.
+function groupCipherIdsByOwner(ciphers: Cipher[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const cipher of ciphers) {
+    const list = grouped.get(cipher.userId);
+    if (list) {
+      list.push(cipher.id);
+    } else {
+      grouped.set(cipher.userId, [cipher.id]);
+    }
+  }
+  return grouped;
 }
 
 // POST/PUT /api/ciphers/move - Bulk move to folder
@@ -1300,10 +1676,28 @@ export async function handleBulkMoveCiphers(request: Request, env: Env, userId: 
     if (!folderOk) return errorResponse('Folder not found', 404);
   }
 
-  const revisionDate = await storage.bulkMoveCiphers(body.ids, folderId, userId);
-  if (revisionDate) {
-    notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  const ids = Array.from(new Set(body.ids.map((id) => String(id || '').trim()).filter(Boolean)));
+  // Folder assignment is inherently personal: a folder belongs to a single
+  // user (verified above), and org ciphers accessed via a collection grant
+  // can still be filed into the acting user's own folders. Gate on write
+  // access (see loadAuthorizedCiphersForBulkWrite for the skip behavior);
+  // org/collection assignment itself is out of scope here (see Task 6).
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (!authorizedCiphers.length) {
+    return new Response(null, { status: 204 });
   }
+
+  for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+    await storage.bulkMoveCiphers(ownerCipherIds, folderId, ownerId);
+  }
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  await notifyOrgCipherChange(
+    env,
+    storage,
+    authorizedCiphers.map((cipher) => cipher.organizationId),
+    readActingDeviceIdentifier(request)
+  );
 
   return new Response(null, { status: 204 });
 }
@@ -1314,7 +1708,19 @@ async function buildCipherListResponse(
   userId: string,
   ids: string[]
 ): Promise<Response> {
-  const ciphers = await storage.getCiphersByIds(ids, userId);
+  // storage.getCiphersByIds is personal-scoped (WHERE user_id = ?) and would
+  // silently drop org ciphers the caller can only reach via a collection
+  // grant/owner-bypass -- exactly the ciphers a bulk archive/unarchive call
+  // may have just touched. Resolve each id individually via storage.getCipher
+  // and gate through canReadCipher instead, so those ciphers round-trip in
+  // the response.
+  const loaded = await Promise.all(ids.map((id) => storage.getCipher(id)));
+  const ciphers: Cipher[] = [];
+  for (const cipher of loaded) {
+    if (cipher && (await canReadCipher(storage, userId, cipher))) {
+      ciphers.push(cipher);
+    }
+  }
   const attachmentsByCipher = await storage.getAttachmentsByCipherIds(ciphers.map((cipher) => cipher.id));
 
   return jsonResponse({
@@ -1334,9 +1740,9 @@ function parseCipherIdList(body: { ids?: unknown }): string[] | null {
 // PUT/POST /api/ciphers/:id/archive
 export async function handleArchiveCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
   if (cipher.deletedAt) {
@@ -1350,6 +1756,9 @@ export async function handleArchiveCipher(request: Request, env: Env, userId: st
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
   notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
 
   const attachments = await storage.getAttachmentsByCipher(cipher.id);
   return jsonResponse(
@@ -1360,9 +1769,9 @@ export async function handleArchiveCipher(request: Request, env: Env, userId: st
 // PUT/POST /api/ciphers/:id/unarchive
 export async function handleUnarchiveCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);
-  const cipher = await storage.getCipherForUser(id, userId);
+  const cipher = await storage.getCipher(id);
 
-  if (!cipher || cipher.userId !== userId) {
+  if (!cipher || !(await canWriteCipher(storage, userId, cipher))) {
     return errorResponse('Cipher not found', 404);
   }
 
@@ -1372,6 +1781,9 @@ export async function handleUnarchiveCipher(request: Request, env: Env, userId: 
   await storage.saveCipher(cipher);
   const revisionDate = await storage.updateRevisionDate(userId);
   notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  if (cipher.organizationId) {
+    await notifyOrgCipherChange(env, storage, [cipher.organizationId], readActingDeviceIdentifier(request));
+  }
 
   const attachments = await storage.getAttachmentsByCipher(cipher.id);
   return jsonResponse(
@@ -1395,10 +1807,22 @@ export async function handleBulkArchiveCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkArchiveCiphers(ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkArchiveCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+    await notifyOrgCipherChange(
+      env,
+      storage,
+      authorizedCiphers.map((cipher) => cipher.organizationId),
+      readActingDeviceIdentifier(request)
+    );
   }
 
   return buildCipherListResponse(request, storage, userId, ids);
@@ -1420,10 +1844,22 @@ export async function handleBulkUnarchiveCiphers(request: Request, env: Env, use
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkUnarchiveCiphers(ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkUnarchiveCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+    await notifyOrgCipherChange(
+      env,
+      storage,
+      authorizedCiphers.map((cipher) => cipher.organizationId),
+      readActingDeviceIdentifier(request)
+    );
   }
 
   return buildCipherListResponse(request, storage, userId, ids);
@@ -1444,12 +1880,25 @@ export async function handleBulkDeleteCiphers(request: Request, env: Env, userId
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkSoftDeleteCiphers(body.ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, body.ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkSoftDeleteCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+    await notifyOrgCipherChange(
+      env,
+      storage,
+      authorizedCiphers.map((cipher) => cipher.organizationId),
+      readActingDeviceIdentifier(request)
+    );
     await writeCipherAudit(storage, request, userId, 'cipher.delete.soft.bulk', {
-      count: body.ids.length,
+      count: authorizedCiphers.length,
+      requestedCount: body.ids.length,
     });
   }
 
@@ -1471,10 +1920,22 @@ export async function handleBulkRestoreCiphers(request: Request, env: Env, userI
     return errorResponse('ids array is required', 400);
   }
 
-  const revisionDate = await storage.bulkRestoreCiphers(body.ids, userId);
-  if (revisionDate) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, body.ids);
+  if (authorizedCiphers.length) {
+    for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+      await storage.bulkRestoreCiphers(ownerCipherIds, ownerId);
+    }
+    const revisionDate = await storage.updateRevisionDate(userId);
     notifyVaultSyncForRequest(request, env, userId, revisionDate);
     notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+    await notifyOrgCipherChange(
+      env,
+      storage,
+      authorizedCiphers.map((cipher) => cipher.organizationId),
+      readActingDeviceIdentifier(request)
+    );
   }
 
   return new Response(null, { status: 204 });
@@ -1500,23 +1961,32 @@ export async function handleBulkPermanentDeleteCiphers(request: Request, env: En
     return new Response(null, { status: 204 });
   }
 
-  const ownedCiphers = await storage.getCiphersByIds(ids, userId);
-  const ownedIds = ownedCiphers.map((cipher) => cipher.id);
-  if (!ownedIds.length) {
+  // See loadAuthorizedCiphersForBulkWrite: ids the caller can't write to are
+  // silently skipped rather than failing the whole request.
+  const authorizedCiphers = await loadAuthorizedCiphersForBulkWrite(storage, userId, ids);
+  const authorizedIds = authorizedCiphers.map((cipher) => cipher.id);
+  if (!authorizedIds.length) {
     return new Response(null, { status: 204 });
   }
 
-  await deleteAllAttachmentsForCiphers(env, ownedIds);
+  await deleteAllAttachmentsForCiphers(env, authorizedIds);
 
-  const revisionDate = await storage.bulkDeleteCiphers(ownedIds, userId);
-  if (revisionDate) {
-    notifyVaultSyncForRequest(request, env, userId, revisionDate);
-    notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
-    await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent.bulk', {
-      count: ownedIds.length,
-      requestedCount: ids.length,
-    });
+  for (const [ownerId, ownerCipherIds] of groupCipherIdsByOwner(authorizedCiphers)) {
+    await storage.bulkDeleteCiphers(ownerCipherIds, ownerId);
   }
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  notifyUserCiphersSync(env, userId, revisionDate, readActingDeviceIdentifier(request));
+  await notifyOrgCipherChange(
+    env,
+    storage,
+    authorizedCiphers.map((cipher) => cipher.organizationId),
+    readActingDeviceIdentifier(request)
+  );
+  await writeCipherAudit(storage, request, userId, 'cipher.delete.permanent.bulk', {
+    count: authorizedIds.length,
+    requestedCount: ids.length,
+  });
 
   return new Response(null, { status: 204 });
 }
