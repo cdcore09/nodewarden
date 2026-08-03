@@ -7,6 +7,7 @@ import { notifyUserVaultSync } from '../durable/notifications-hub';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { parseCreateOrgRequest, organizationToResponse } from './org-shapes';
 import { bumpAndNotifyMembers } from './org-users';
+import { deleteBlobObject, getAttachmentObjectKey } from '../services/blob-store';
 
 const ORG_NOT_FOUND = 'Organization not found';
 
@@ -132,6 +133,27 @@ export async function handleDeleteOrganization(request: Request, env: Env, userI
   // away — bumpAndNotifyMembers can't be used post-delete since it re-queries
   // membership internally.
   const memberIds = await storage.listConfirmedMemberUserIds(orgId);
+
+  // ciphers.organization_id has NO foreign key to organizations (by design —
+  // it would conflict with the ownership invariant that ciphers.user_id must
+  // always resolve), so deleteOrganization's cascade never reaches the org's
+  // ciphers. Purge them explicitly, along with their R2/KV attachment blobs
+  // (deleting the attachment DB rows alone — which cascade automatically via
+  // attachments.cipher_id ON DELETE CASCADE once the cipher row is deleted —
+  // does NOT delete the underlying blob object). Order: enumerate blob keys
+  // -> delete blobs -> delete cipher rows (cascades attachments +
+  // cipher_collections) -> delete the org row itself.
+  const orgCipherIds = await storage.getOrgCipherIds(orgId);
+  if (orgCipherIds.length > 0) {
+    const attachmentsByCipher = await storage.getAttachmentsByCipherIds(orgCipherIds);
+    for (const [cipherId, attachments] of attachmentsByCipher) {
+      for (const attachment of attachments) {
+        await deleteBlobObject(env, getAttachmentObjectKey(cipherId, attachment.id));
+      }
+    }
+    await storage.deleteOrgCiphers(orgId);
+  }
+
   await storage.deleteOrganization(orgId);
 
   const contextId = readActingDeviceIdentifier(request);

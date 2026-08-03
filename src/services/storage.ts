@@ -94,6 +94,8 @@ import {
   getCollectionIdsForCiphers as listStoredCollectionIdsForCiphers,
   saveCipher as saveStoredCipher,
   deleteCipher as deleteStoredCipher,
+  deleteOrgCiphers as deleteStoredOrgCiphers,
+  getOrgCipherIds as listStoredOrgCipherIds,
 } from './storage-cipher-repo';
 import {
   addAttachmentToCipher as attachStoredAttachmentToCipher,
@@ -533,6 +535,19 @@ export class StorageService {
 
   async deleteCipher(id: string, userId: string): Promise<void> {
     await deleteStoredCipher(this.db, id, userId);
+  }
+
+  // Org-delete cleanup (Task 8): ciphers.organization_id has no FK, so the
+  // organizations row's cascade never reaches ciphers — callers must purge
+  // an org's ciphers explicitly. See storage-cipher-repo.deleteOrgCiphers.
+  async deleteOrgCiphers(orgId: string): Promise<void> {
+    await deleteStoredOrgCiphers(this.db, orgId);
+  }
+
+  // Bare cipher ids for an org, for cleanup paths (e.g. enumerating
+  // attachment blob keys before org delete). See getOrgCipherIds.
+  async getOrgCipherIds(orgId: string): Promise<string[]> {
+    return listStoredOrgCipherIds(this.db, orgId);
   }
 
   async bulkSoftDeleteCiphers(ids: string[], userId: string): Promise<string | null> {

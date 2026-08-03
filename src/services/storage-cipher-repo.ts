@@ -161,6 +161,32 @@ export async function deleteCipher(db: D1Database, id: string, userId: string): 
   await db.prepare('DELETE FROM ciphers WHERE id = ? AND user_id = ?').bind(id, userId).run();
 }
 
+// ciphers.organization_id has NO foreign key to organizations (by design —
+// see the ownership-invariant note at getAllCiphers/getOrgCiphersForOwner
+// above: ciphers.user_id must always resolve, so the FK stays on user_id
+// only). That means deleting an organizations row does NOT cascade to its
+// ciphers — callers (handleDeleteOrganization) MUST call this explicitly
+// before/around the org delete, or the org's ciphers are orphaned:
+// organization_id pointing at a gone org, invisible to every access path
+// (no membership can ever be confirmed for a deleted org) but still
+// occupying storage. attachments.cipher_id and cipher_collections.cipher_id
+// DO have ON DELETE CASCADE FKs to ciphers(id) (migrations/0001_init.sql,
+// migrations/0002_organizations.sql), so deleting these cipher rows also
+// removes their attachment + cipher_collections rows automatically.
+export async function deleteOrgCiphers(db: D1Database, orgId: string): Promise<void> {
+  await db.prepare('DELETE FROM ciphers WHERE organization_id = ?').bind(orgId).run();
+}
+
+// Cipher ids for every cipher in an org, regardless of caller identity —
+// used by org-delete cleanup to enumerate attachment blob keys (R2/KV)
+// before the DB rows are purged. Unlike getOrgCiphersForOwner this returns
+// bare ids only (cheaper) and carries no access-control semantics; it must
+// only be called from trusted cleanup paths, not exposed to a request actor.
+export async function getOrgCipherIds(db: D1Database, orgId: string): Promise<string[]> {
+  const res = await db.prepare('SELECT id FROM ciphers WHERE organization_id = ?').bind(orgId).all<{ id: string }>();
+  return (res.results || []).map((row) => row.id);
+}
+
 export async function bulkSoftDeleteCiphers(
   db: D1Database,
   sqlChunkSize: SqlChunkSize,
