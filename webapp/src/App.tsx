@@ -530,6 +530,15 @@ export default function App() {
       setJwtWarning(null);
       setSession(null);
       setProfile(null);
+      // Boot settles the phase after the org-invite deep-link effect has run,
+      // so re-apply the register routing for invites that carry a
+      // registration code (recipient has no account yet).
+      if (initialOrgInvite?.inviteCode) {
+        setPhase('register');
+        setUnlockPreparing(false);
+        if (location !== '/register') navigate('/register');
+        return;
+      }
       setPhase('login');
       setUnlockPreparing(false);
       if (!isDemoPublicSendRoute && location !== '/login') navigate('/login');
@@ -546,7 +555,13 @@ export default function App() {
       setJwtWarning(boot.jwtWarning);
       setSession(boot.session);
       setProfile(boot.profile);
-      setPhase(boot.phase);
+      if (boot.phase === 'login' && !boot.session && initialOrgInvite?.inviteCode) {
+        // Same re-apply for the real bootstrap path (see demo branch above).
+        setPhase('register');
+        if (location !== '/register') navigate('/register');
+      } else {
+        setPhase(boot.phase);
+      }
       setUnlockPreparing(boot.phase === 'locked' && !boot.session?.email);
     })();
 
