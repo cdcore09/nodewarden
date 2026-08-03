@@ -540,8 +540,8 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
         const optimistic = optimisticCipherFromDraft(draft, null);
         patchDecryptedCiphers((prev) => [optimistic, ...prev.filter((cipher) => cipher.id !== optimistic.id)]);
         try {
-          // nosemgrep: javascript.node-crypto.security.create-de-cipher-no-iv.create-de-cipher-no-iv -- this is the app's vault-item createCipher (HTTP), not Node crypto.createCipher
-          const created = await createCipher(authedFetch, session, draft, orgKeys);
+          // App's vault-item createCipher (HTTP call), NOT Node crypto.createCipher — no IV/cipher-mode involved.
+          const created = await createCipher(authedFetch, session, draft, orgKeys); // nosemgrep: javascript.node-crypto.security.create-de-cipher-no-iv.create-de-cipher-no-iv
           for (const file of attachments) {
             setUploadingAttachmentName(file.name);
             setAttachmentUploadPercent(0);
