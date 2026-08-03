@@ -1,14 +1,12 @@
 import { useState } from 'preact/hooks';
 import { Plus } from 'lucide-preact';
+import { useLocation } from 'wouter';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { WebCryptoUnavailableError } from '@/lib/crypto';
 import { generateOrgKeys } from '@/lib/org-crypto';
 import { t } from '@/lib/i18n';
-import { getProfileOrganizations, type CreateOrganizationInput } from '@/lib/api/organizations';
+import { getProfileOrganizations, ORGANIZATION_TYPE_OWNER, type CreateOrganizationInput } from '@/lib/api/organizations';
 import type { Profile } from '@/lib/types';
-
-// Owner/member role, mirroring the server's organization_users.role (0 = owner).
-const ORGANIZATION_TYPE_OWNER = 0;
 
 interface OrganizationsPageProps {
   profile: Profile;
@@ -21,10 +19,15 @@ function organizationRoleLabel(type: number): string {
 }
 
 export default function OrganizationsPage(props: OrganizationsPageProps) {
+  const [, navigate] = useLocation();
   const organizations = getProfileOrganizations(props.profile);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  function openOrganization(id: string): void {
+    navigate(`/organizations/${id}`);
+  }
 
   function openCreateDialog(): void {
     setName('');
@@ -89,7 +92,19 @@ export default function OrganizationsPage(props: OrganizationsPageProps) {
           </thead>
           <tbody>
             {organizations.map((organization) => (
-              <tr key={organization.id}>
+              <tr
+                key={organization.id}
+                className="table-row-clickable"
+                role="button"
+                tabIndex={0}
+                onClick={() => openOrganization(organization.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openOrganization(organization.id);
+                  }
+                }}
+              >
                 <td data-label={t('txt_name')}>{organization.name}</td>
                 <td data-label={t('txt_role')}>{organizationRoleLabel(organization.type)}</td>
               </tr>
