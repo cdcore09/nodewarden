@@ -1,4 +1,5 @@
 import { base64ToBytes, decryptBw, decryptBwFileData, decryptStr, encryptBw, encryptBwFileData, sha256Base64 } from '../crypto';
+import { orgKeyHalves } from '../org-crypto';
 import type {
   Cipher,
   CipherPasswordHistoryEntry,
@@ -22,6 +23,35 @@ import { loadVaultCoreSyncSnapshot } from './vault-sync';
 
 type CipherLoginData = NonNullable<Cipher['login']>;
 const NODEWARDEN_WEB_REPAIR_HEADER = 'X-NodeWarden-Web';
+
+// SECURITY: thrown when an org cipher's key isn't available in the caller's
+// orgKeys map (missing membership, failed unwrap, wrong length, etc). Callers
+// MUST NOT catch this and fall back to the personal key or another org's key
+// -- that would silently corrupt the shared cipher for the whole org.
+export class OrgKeyUnavailableError extends Error {
+  constructor(public orgId: string) {
+    super(`Organization key unavailable for org ${orgId}`);
+    this.name = 'OrgKeyUnavailableError';
+  }
+}
+
+// SECURITY: mirrors the decrypt-path selection in vault-decrypt.ts:147-165.
+// Personal cipher -> personal key. Org cipher -> that org's key halves. If the
+// org key isn't available, THROW -- never fall back to the personal key (that
+// would silently corrupt the shared cipher for the whole org).
+export function resolveCipherBaseKey(
+  cipher: Cipher | null,
+  personalEnc: Uint8Array,
+  personalMac: Uint8Array,
+  orgKeys: Record<string, Uint8Array> | undefined
+): { enc: Uint8Array; mac: Uint8Array } {
+  const orgId = cipher?.organizationId || null;
+  if (!orgId) return { enc: personalEnc, mac: personalMac };
+  const orgKey = orgKeys?.[orgId];
+  if (!orgKey) throw new OrgKeyUnavailableError(orgId);
+  const halves = orgKeyHalves(orgKey); // throws on wrong length
+  return { enc: halves.enc, mac: halves.mac };
+}
 
 export async function getFolders(authedFetch: AuthedFetch, cacheKey: string): Promise<Folder[]> {
   const body = await loadVaultCoreSyncSnapshot(authedFetch, cacheKey);
@@ -906,18 +936,20 @@ async function normalizeFido2Credentials(
 
 async function getCipherKeys(
   cipher: Cipher | null,
-  userEnc: Uint8Array,
-  userMac: Uint8Array
+  personalEnc: Uint8Array,
+  personalMac: Uint8Array,
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<{ enc: Uint8Array; mac: Uint8Array; key: string | null }> {
+  const base = resolveCipherBaseKey(cipher, personalEnc, personalMac, orgKeys); // throws if org key missing
   if (cipher?.key) {
     try {
-      const raw = await decryptBw(cipher.key, userEnc, userMac);
+      const raw = await decryptBw(cipher.key, base.enc, base.mac);
       if (raw.length >= 64) return { enc: raw.slice(0, 32), mac: raw.slice(32, 64), key: cipher.key };
     } catch {
-      // use user key
+      // fall through to the base (org-or-personal) key -- NOT the personal key for an org cipher
     }
   }
-  return { enc: userEnc, mac: userMac, key: null };
+  return { enc: base.enc, mac: base.mac, key: null };
 }
 
 async function repairCipherLoginUris(
@@ -1276,12 +1308,13 @@ export async function repairCipherKeyMismatches(
 async function buildCipherPayload(
   session: SessionState,
   draft: VaultDraft,
-  cipher: Cipher | null
+  cipher: Cipher | null,
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<Record<string, unknown>> {
   if (!session.symEncKey || !session.symMacKey) throw new Error('Vault key unavailable');
   const userEnc = base64ToBytes(session.symEncKey);
   const userMac = base64ToBytes(session.symMacKey);
-  const keys = await getCipherKeys(cipher, userEnc, userMac);
+  const keys = await getCipherKeys(cipher, userEnc, userMac, orgKeys);
   const type = Number(draft.type || cipher?.type || 1);
   const now = new Date().toISOString();
 
@@ -1440,15 +1473,17 @@ async function buildCipherPayload(
 }
 
 export async function buildCipherImportPayload(session: SessionState, draft: VaultDraft): Promise<Record<string, unknown>> {
-  return buildCipherPayload(session, draft, null);
+  // Imports are always a null cipher (personal-only): no org key is needed or available.
+  return buildCipherPayload(session, draft, null, undefined);
 }
 
 export async function createCipher(
   authedFetch: AuthedFetch,
   session: SessionState,
-  draft: VaultDraft
+  draft: VaultDraft,
+  orgKeys: Record<string, Uint8Array> | undefined
 ): Promise<Cipher> {
-  const payload = await buildCipherPayload(session, draft, null);
+  const payload = await buildCipherPayload(session, draft, null, orgKeys);
 
   const resp = await authedFetch('/api/ciphers', {
     method: 'POST',
@@ -1466,10 +1501,11 @@ export async function updateCipher(
   session: SessionState,
   cipher: Cipher,
   draft: VaultDraft,
+  orgKeys: Record<string, Uint8Array> | undefined,
   extraPayload?: Record<string, unknown>,
   options?: { webRepair?: boolean }
 ): Promise<Cipher> {
-  const payload = await buildCipherPayload(session, draft, cipher);
+  const payload = await buildCipherPayload(session, draft, cipher, orgKeys);
   if (extraPayload) {
     Object.assign(payload, extraPayload);
   }
