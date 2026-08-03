@@ -155,7 +155,7 @@ if (adminLogin.status !== 200 || !adminLogin.json?.access_token) {
 const adminToken = adminLogin.json.access_token;
 
 const orgRes = await api('POST', '/api/organizations', adminToken, {
-  name: `Smoke Collections Org ${runId}`, key: '4.smoke-wrapped', keys: { publicKey: 'org-pub', encryptedPrivateKey: '2.org-priv' },
+  name: `Smoke Collections Org ${runId}`, key: '4.smoke-wrapped', keys: { publicKey: 'org-pub', encryptedPrivateKey: '2.org-priv' }, // gitleaks:allow -- fake test placeholder, not a real secret
 });
 check('admin creates org', orgRes.status === 200 && orgRes.json?.id, `status ${orgRes.status}: ${orgRes.text}`);
 const orgId = orgRes.json.id;
@@ -298,7 +298,7 @@ if (process.env.REG_CODE_3) {
     const admin2Login = await login(ADMIN2_EMAIL);
     const admin2Token = admin2Login.json.access_token;
     const org2Res = await api('POST', '/api/organizations', admin2Token, {
-      name: `Smoke Collections Org2 ${runId}`, key: '4.smoke-wrapped-2', keys: { publicKey: 'org2-pub', encryptedPrivateKey: '2.org2-priv' },
+      name: `Smoke Collections Org2 ${runId}`, key: '4.smoke-wrapped-2', keys: { publicKey: 'org2-pub', encryptedPrivateKey: '2.org2-priv' }, // gitleaks:allow -- fake test placeholder, not a real secret
     });
     check('admin2 creates org2', org2Res.status === 200 && org2Res.json?.id, `status ${org2Res.status}: ${org2Res.text}`);
     const org2Id = org2Res.json?.id;
