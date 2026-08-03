@@ -1,0 +1,164 @@
+name: Upstream sync
+
+# Hourly watcher for shuaiplus/nodewarden. A cheap check job exits early when
+# there is nothing to sync or a previous sync is blocked on an open
+# `upstream-sync` issue; otherwise a Claude agent reviews the incoming
+# changes, screens them for security / supply-chain problems, and either
+# lands a merge commit on main or opens an assigned issue with a
+# remediation plan.
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM_REPO: https://github.com/shuaiplus/nodewarden.git
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      sync_needed: ${{ steps.check.outputs.sync_needed }}
+      behind: ${{ steps.check.outputs.behind }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare against upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch --quiet upstream main
+          BEHIND="$(git rev-list --count HEAD..upstream/main)"
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "Up to date with upstream."
+            echo "sync_needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OPEN_BLOCKERS="$(gh issue list --label upstream-sync --state open --json number --jq 'length')"
+          if [ "$OPEN_BLOCKERS" -gt 0 ]; then
+            echo "::notice::$BEHIND upstream commit(s) pending, but an open upstream-sync issue blocks automatic merging. Close it to resume."
+            echo "sync_needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$BEHIND upstream commit(s) to review."
+          echo "sync_needed=true" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: check
+    if: needs.check.outputs.sync_needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare git
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch --quiet upstream main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Review and sync with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: |
+            --allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Read,Grep,Glob,Edit"
+            --max-turns 100
+          prompt: |
+            You are the automated upstream-sync agent for this fork
+            (cdcore09/nodewarden). The `upstream` remote
+            (shuaiplus/nodewarden) is already fetched and main is
+            ${{ needs.check.outputs.behind }} commit(s) behind upstream/main.
+            Work through the phases below strictly in order. Your goal is to
+            land upstream changes only when they are provably safe, and to
+            escalate everything else.
+
+            ## Phase 1 — Review
+            Read `git log --stat main..upstream/main` and
+            `git diff main...upstream/main` until you understand every
+            incoming change. Small mechanical changes can be skimmed; read
+            anything touching auth, crypto, storage, networking, or CI in
+            full.
+
+            ## Phase 2 — Security and supply chain screen
+            Code: flag obfuscated logic, dynamic eval of external input,
+            embedded base64/hex blobs, new network endpoints or beacon URLs,
+            access to credentials/tokens/vault plaintext beyond existing
+            patterns, changes that weaken crypto or auth checks, and any
+            modification to .github/workflows or install/build scripts.
+            Dependencies: diff package.json and package-lock.json. For every
+            added or bumped package check the lockfile for non-default
+            registry URLs (anything other than registry.npmjs.org), new
+            install/postinstall scripts, and typosquat-style names. After a
+            clean `npm ci`, run `npm audit --omit=dev` and treat new
+            high/critical advisories as blocking findings.
+
+            ## Phase 3 — Merge attempt
+            Run `git merge --no-ff --no-commit upstream/main`.
+            This fork carries intentional additions upstream does not have —
+            most importantly one import line in webapp/src/main.tsx
+            (`import './lib/skin';`) and an import plus `<SkinSelect />` in
+            webapp/src/components/SettingsPage.tsx, plus fork-only files
+            under webapp/src/styles/skins/, webapp/src/lib/skin.ts, and
+            webapp/src/components/SkinSelect.tsx. A conflict is TRIVIAL only
+            when it is mechanical adjacency around those additive lines; fix
+            it by keeping both upstream's change and the fork's lines.
+            Anything else — logic conflicts, upstream restructuring of files
+            the fork extends, or conflicts across more than 3 files — is
+            MAJOR: run `git merge --abort` and go to Phase 6.
+
+            ## Phase 4 — Verify
+            With the merge staged (or committed locally), run `npm ci`,
+            `npm run build`, `npm run test:orgs`, and
+            `npm run test:config-compatibility`. Any failure: undo the merge
+            (`git merge --abort`, or `git reset --hard origin/main` if
+            already committed) and go to Phase 6.
+
+            ## Phase 5 — Land (only if Phases 2-4 were fully clean)
+            Commit the merge with a plain message in this exact shape and
+            nothing else appended (no attribution lines, no Co-Authored-By
+            trailers):
+              chore(sync): merge upstream shuaiplus/nodewarden (<short-sha>, ${{ needs.check.outputs.behind }} commits)
+            Then `git push origin main`. Push only this one merge commit.
+            Never force-push. If the push is rejected, do not retry with
+            force — go to Phase 6.
+
+            ## Phase 6 — Escalate instead of merging
+            Reach this phase for any blocking security finding, MAJOR
+            conflict, verification failure, or unexpected git state. Make
+            sure nothing is merged (working tree clean, main untouched),
+            then create exactly one issue:
+              gh issue create \
+                --title "Upstream sync blocked: <one-line reason>" \
+                --label upstream-sync \
+                --assignee cdcore09 \
+                --body "<markdown>"
+            The body must contain: the list of upstream commits reviewed,
+            each blocking finding with file/line references and why it
+            blocks, a risk assessment, and a concrete step-by-step
+            remediation plan with your recommended option first. The open
+            `upstream-sync` label is what pauses future automatic runs, so
+            do not create the issue unless you are actually blocking, and
+            never create a second one if an open one already exists.
