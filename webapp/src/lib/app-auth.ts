@@ -1,6 +1,7 @@
 import {
   createAuthedFetch,
   deriveLoginHashLocally,
+  extractAccountPublicKey,
   getAccountPasskeyAssertionOptions,
   getProfile,
   loadProfileSnapshot,
@@ -306,6 +307,13 @@ function buildTransientProfile(token: TokenSuccess, email: string, fallbackProfi
   const claims = decodeAccessTokenClaims(token.access_token);
   const normalizedEmail = String(claims.email || email || '').trim().toLowerCase();
   const accountKeys = token.accountKeys ?? token.AccountKeys ?? null;
+  // The login response, like the profile response, only carries the account's public
+  // key nested inside accountKeys.publicKeyEncryptionKeyPair.publicKey — normalize it
+  // to the top-level field the rest of the app reads (see extractAccountPublicKey).
+  const publicKey = extractAccountPublicKey({
+    publicKey: fallbackProfile?.publicKey ?? null,
+    accountKeys,
+  });
   return {
     id: String(claims.sub || ''),
     email: normalizedEmail,
@@ -316,7 +324,7 @@ function buildTransientProfile(token: TokenSuccess, email: string, fallbackProfi
     premium: !!claims.premium,
     accountKeys,
     masterPasswordHint: fallbackProfile?.masterPasswordHint ?? null,
-    publicKey: fallbackProfile?.publicKey ?? null,
+    publicKey,
     object: 'profile',
   };
 }
