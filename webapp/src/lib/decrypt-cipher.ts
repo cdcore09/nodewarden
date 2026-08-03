@@ -1,5 +1,6 @@
 import { decryptStr, decryptBw } from './crypto';
 import { looksLikeCipherString } from './app-support';
+import { resolveCipherBaseKey } from './api/vault';
 import type { Cipher } from './types';
 
 async function decryptCipherField(
@@ -28,9 +29,17 @@ async function decryptCipherField(
 
 export async function decryptSingleCipher(
   encrypted: Cipher,
-  userEnc: Uint8Array,
-  userMac: Uint8Array,
+  personalEnc: Uint8Array,
+  personalMac: Uint8Array,
+  orgKeys?: Record<string, Uint8Array>,
 ): Promise<Cipher> {
+  // SECURITY: mirrors the decrypt-path selection in vault-decrypt.ts:147-165 and
+  // resolveCipherBaseKey in api/vault.ts. Personal cipher -> personal key. Org
+  // cipher -> that org's key halves, or throw (never fall back to the personal
+  // key -- that would silently corrupt/misrender the shared cipher).
+  const base = resolveCipherBaseKey(encrypted, personalEnc, personalMac, orgKeys);
+  const userEnc = base.enc;
+  const userMac = base.mac;
   let itemEnc = userEnc;
   let itemMac = userMac;
   let usesItemKey = false;

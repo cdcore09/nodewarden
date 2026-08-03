@@ -258,7 +258,8 @@ export async function uploadCipherAttachment(
   cipherId: string,
   file: File,
   cipherForKey?: Cipher | null,
-  onProgress?: (percent: number | null) => void
+  onProgress?: (percent: number | null) => void,
+  orgKeys?: Record<string, Uint8Array>
 ): Promise<void> {
   if (!session.symEncKey || !session.symMacKey) throw new Error('Vault key unavailable');
   const id = String(cipherId || '').trim();
@@ -267,7 +268,7 @@ export async function uploadCipherAttachment(
 
   const userEnc = base64ToBytes(session.symEncKey);
   const userMac = base64ToBytes(session.symMacKey);
-  const itemKeys = await getCipherKeys(cipherForKey || null, userEnc, userMac);
+  const itemKeys = await getCipherKeys(cipherForKey || null, userEnc, userMac, orgKeys);
 
   const encryptedFileName = await encryptTextValue(file.name, itemKeys.enc, itemKeys.mac);
   if (!encryptedFileName) throw new Error('Invalid attachment name');
@@ -430,7 +431,8 @@ export async function downloadCipherAttachmentDecrypted(
   session: SessionState,
   cipher: Cipher,
   attachmentId: string,
-  onProgress?: (percent: number | null) => void
+  onProgress?: (percent: number | null) => void,
+  orgKeys?: Record<string, Uint8Array>
 ): Promise<{ fileName: string; bytes: Uint8Array }> {
   if (!session.symEncKey || !session.symMacKey) throw new Error('Vault key unavailable');
   const cid = String(cipher?.id || '').trim();
@@ -444,7 +446,7 @@ export async function downloadCipherAttachmentDecrypted(
 
   const userEnc = base64ToBytes(session.symEncKey);
   const userMac = base64ToBytes(session.symMacKey);
-  const itemKeys = await getCipherKeys(cipher, userEnc, userMac);
+  const itemKeys = await getCipherKeys(cipher, userEnc, userMac, orgKeys);
   const userKeys = { enc: userEnc, mac: userMac };
 
   const candidates: AttachmentDecryptCandidate[] = [];

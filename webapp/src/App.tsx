@@ -1953,6 +1953,7 @@ export default function App() {
     patchDecryptedFolders: setDecryptedFolders,
     patchDecryptedSends: setDecryptedSends,
     refreshVaultRevisionStamp: refreshVaultCoreRevisionStamp,
+    orgKeys: orgKeysCache,
   });
   const accountSecurityActions = useAccountSecurityActions({
     authedFetch,

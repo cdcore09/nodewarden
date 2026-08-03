@@ -1477,7 +1477,8 @@ Object.assign(ru, {
   "txt_org_missing_encryption_key": "Your account is missing an encryption key. Sign out and back in, then try again.",
   "txt_org_create_failed": "Failed to create organization",
   "txt_org_created": "\"{name}\" was created.",
-  "txt_org_item_readonly": "Organization items are read-only here for now. No changes were saved."
+  "txt_org_item_readonly": "Organization items are read-only here for now. No changes were saved.",
+  "txt_org_key_unavailable": "Organization key isn't ready yet. Wait for sync to finish, then try again."
 });
 
 export default ru;
