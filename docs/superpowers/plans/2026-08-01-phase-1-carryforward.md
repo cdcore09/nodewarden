@@ -98,9 +98,17 @@ does not enforce that restriction. Left as an open question for Phase 4/5 (or a 
 to decide whether `folder_id` should be rejected outright on org ciphers, or reworked into a per-member
 mapping.
 
-## UI phase (4/5) notes
+## Phase 4a (client org-crypto + create/list orgs + org-item display) — DONE 2026-08-03
+
+Merged/complete: `webapp/src/lib/org-crypto.ts` (org key gen/wrap/unwrap, RSA-OAEP/SHA-1 type-4, unit-tested), account RSA private key accessor, org API client, Organizations page + create-org flow (i18n'd, matches web-vault look), org ciphers/collections DECRYPT + display in the vault (airtight per-org key selection, fails closed), routing/nav, demo-safe.
+
+**DELIBERATE 4a LIMITATION — org items are READ-ONLY in the web vault (Phase 4b MUST lift this):** In 4a, org ciphers DISPLAY (decrypted) but every vault WRITE action (edit/delete/archive/unarchive/move/bulk-*) fails closed on org ciphers with a `txt_org_item_readonly` toast, and the auto URI-checksum + key-mismatch REPAIR paths skip org ciphers. Reason (found by the 4a final review): the webapp write path (`getCipherKeys`/`buildCipherPayload` in `webapp/src/lib/api/vault.ts`, `updateVaultItem` et al. in `webapp/src/hooks/useVaultSendActions.ts`) is personal-key-only and would silently re-encrypt an org item with the USER key → corrupt it for the whole org (the server treats encryption as opaque and accepts the bad write). **Phase 4b MUST: (1) thread the org key into the write path (getCipherKeys must use the org key's halves for org ciphers, mirroring how 4a's decrypt path selects keys), (2) THEN remove the `requireNotOrgCipher`/`requireNoOrgCiphersById` guards in useVaultSendActions.ts, and (3) re-enable `repairCipherUriChecksums`/`repairCipherKeyMismatches` for org ciphers (remove the `if (cipher.organizationId) continue;` skips).** Until then, org items are edited via official Bitwarden clients only.
+
+## UI phase (4b/5) notes
 
 - `webapp/src/lib/api/backup.ts` `AdminBackupImportCounts` type is missing the five new optional org-table count fields (server sends them; untyped consumer ignores them today). Update when touching the webapp.
+- **4b org-item WRITE path** — see the DELIBERATE 4a LIMITATION above; this is 4b's first crypto task before any member/collection UI.
+- **`decryptedCollections`** is plumbed through `AppMainRoutes` (declared, unconsumed) ready for 4b's collections UI to render org collection names.
 - **`PUT /api/ciphers/:id/collections` (collection reassignment) is NOT implemented** (Phase 3b, per final review Minor #5): an org cipher's collection set is fixed at create/share time. The UI's "move to collections" / edit-collections control needs this endpoint — implement it then (replace-semantics on cipher_collections, same org-consistency + write-permission validation as `handleShareCipher`; a `setCipherCollections` repo helper).
 - **Non-creator org-cipher folder handling** (Phase 3b final review Minor #4, folds into the folder_id-shared-across-viewers limitation below): `handleUpdateCipher` runs `verifyFolderOwnership(cipher.folderId, actingUser)`, which can spuriously 404 a legitimate org writer who isn't the creator when the client omits `folderId`. Resolve alongside the per-user-folder decision.
 - **Backup import cipher_collections org-consistency** (Phase 3b final review Minor #6): backup import validates cipher `organization_id` references exist, but not that a cipher_collections row's cipher and collection share an org. Coherence-only (the member query's org check tolerates inconsistent rows); add alongside the existing referential checks if hardening backup import.
