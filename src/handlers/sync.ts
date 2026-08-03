@@ -12,7 +12,7 @@ import { buildDomainsResponse } from '../services/domain-rules';
 import { buildWebAuthnPrfOption } from '../utils/account-passkeys';
 import { buildProfileResponse } from '../utils/profile-response';
 import { loadProfileOrgs } from '../utils/profile-orgs';
-import { collectionDetailsResponse } from './org-shapes';
+import { loadAccessibleCollections } from './org-collections';
 
 // CONTRACT:
 // /api/sync reuses cipherToResponse() as the single cipher response shaper.
@@ -79,13 +79,21 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
     return cachedResponse;
   }
 
-  const [ciphers, folders, sends, attachmentsByCipher, domainSettings] = await Promise.all([
+  const [personalCiphers, orgCiphers, folders, sends, domainSettings] = await Promise.all([
     storage.getAllCiphers(userId),
+    storage.getAccessibleOrgCiphers(userId),
     storage.getAllFolders(userId),
     excludeSends ? Promise.resolve([]) : storage.getAllSends(userId),
-    storage.getAttachmentsByUserId(userId),
     excludeDomains ? Promise.resolve(null) : storage.getUserDomainSettings(userId),
   ]);
+  // Sync's cipher list is personal ciphers (owned by userId) plus every org
+  // cipher this user may read (owners: all; members: only granted
+  // collections) — see storage.getAccessibleOrgCiphers. Attachments must be
+  // looked up by cipher id across BOTH sets: getAttachmentsByUserId is
+  // scoped to `WHERE ciphers.user_id = ?`, which would silently drop
+  // attachments on org ciphers owned by a teammate.
+  const ciphers = [...personalCiphers, ...orgCiphers];
+  const attachmentsByCipher = await storage.getAttachmentsByCipherIds(ciphers.map((cipher) => cipher.id));
   const webAuthnPrfOptions = accountPasskeys
     .map(buildWebAuthnPrfOption)
     .filter((option): option is NonNullable<typeof option> => !!option);
@@ -95,26 +103,10 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
   const profileOrgs = await loadProfileOrgs(storage, userId);
   const profile: ProfileResponse = buildProfileResponse(user, env, profileOrgs);
 
-  // Collections visible to the syncing user: owners see every collection in
-  // their org (readOnly=false, hidePasswords=false); confirmed members see
-  // only what's been granted to them, with the grant's own flags. Invited/
-  // unconfirmed memberships are excluded, mirroring loadProfileOrgs.
-  const memberships = await storage.listMembershipsForUser(userId);
-  const collectionResponses: Record<string, unknown>[] = [];
-  for (const membership of memberships) {
-    if (membership.orgUser.status !== 'confirmed') continue;
-    if (membership.orgUser.role === 'owner') {
-      const orgCollections = await storage.listCollections(membership.orgUser.orgId);
-      for (const collection of orgCollections) {
-        collectionResponses.push(collectionDetailsResponse(collection, false, false));
-      }
-    } else {
-      const collectionsWithGrant = await storage.listCollectionsForMember(membership.orgUser.id);
-      for (const cwg of collectionsWithGrant) {
-        collectionResponses.push(collectionDetailsResponse(cwg.collection, cwg.readOnly, cwg.hidePasswords));
-      }
-    }
-  }
+  // Collections visible to the syncing user, shared with GET /api/collections
+  // (see loadAccessibleCollections in org-collections.ts for the owner/member
+  // visibility rules).
+  const collectionResponses = await loadAccessibleCollections(storage, userId);
 
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {

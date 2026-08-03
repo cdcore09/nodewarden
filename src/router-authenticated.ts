@@ -119,6 +119,7 @@ import {
   handleDeleteCollection,
   handleGetCollectionUsers,
   handlePutCollectionUsers,
+  handleListAllCollections,
 } from './handlers/org-collections';
 
 export async function handleAuthenticatedRoute(
@@ -428,7 +429,7 @@ export async function handleAuthenticatedRoute(
 
   if (path === '/api/collections' || path.startsWith('/api/collections/')) {
     if (method === 'GET') {
-      return jsonResponse({ data: [], object: 'list', continuationToken: null });
+      return handleListAllCollections(request, env, userId);
     }
     return null;
   }
