@@ -119,6 +119,29 @@ export async function addCipherToCollections(db: D1Database, cipherId: string, c
   await db.batch(stmts);
 }
 
+export async function setCipherCollections(db: D1Database, cipherId: string, collectionIds: string[]): Promise<void> {
+  const desired = Array.from(new Set(collectionIds.map((c) => String(c || '').trim()).filter(Boolean)));
+  const stmts: ReturnType<typeof db.prepare>[] = [];
+  if (desired.length === 0) {
+    stmts.push(db.prepare('DELETE FROM cipher_collections WHERE cipher_id = ?').bind(cipherId));
+  } else {
+    const placeholders = desired.map(() => '?').join(',');
+    stmts.push(
+      db
+        .prepare(`DELETE FROM cipher_collections WHERE cipher_id = ? AND collection_id NOT IN (${placeholders})`)
+        .bind(cipherId, ...desired)
+    );
+    for (const collectionId of desired) {
+      stmts.push(
+        db
+          .prepare('INSERT OR IGNORE INTO cipher_collections(cipher_id, collection_id) VALUES(?,?)')
+          .bind(cipherId, collectionId)
+      );
+    }
+  }
+  await db.batch(stmts);
+}
+
 export async function getCipherCollectionIds(db: D1Database, cipherId: string): Promise<string[]> {
   const res = await db
     .prepare('SELECT collection_id FROM cipher_collections WHERE cipher_id = ?')
