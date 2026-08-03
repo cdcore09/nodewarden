@@ -1506,7 +1506,14 @@ Object.assign(es, {
   "txt_org_remove_title": "Remove member",
   "txt_org_remove_message": "Remove {email} from this organization? They will lose access to all items shared with it.",
   "txt_org_member_removed": "Member removed",
-  "txt_org_remove_failed": "Failed to remove member"
+  "txt_org_remove_failed": "Failed to remove member",
+  "txt_org_confirm_button": "Confirm",
+  "txt_org_confirm_title": "Confirm member",
+  "txt_org_confirm_fingerprint_label": "Fingerprint phrase",
+  "txt_org_confirm_fingerprint_help": "Verify this phrase with the member through another channel before confirming. Confirming grants them access to the organization key.",
+  "txt_org_member_confirmed": "Member confirmed",
+  "txt_org_confirm_failed": "Failed to confirm member",
+  "txt_org_confirm_no_account": "This member has not accepted the invitation yet"
 });
 
 export default es;

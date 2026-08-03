@@ -61,3 +61,29 @@ test('a failed response rejects with a parsed error message', async () => {
   const { authedFetch } = stubFetch({ message: 'nope' }, 400);
   await assert.rejects(() => inviteOrgUsers(authedFetch, 'org1', ['x@y.z']));
 });
+
+test('confirm flow composition: wrapped org key is POSTed verbatim and round-trips for the member', async () => {
+  const { bytesToBase64 } = await import('../webapp/src/lib/crypto');
+  const { rsaWrapOrgKeyForMember, unwrapOrgKey } = await import('../webapp/src/lib/org-crypto');
+
+  const RSA_PARAMS = {
+    name: 'RSA-OAEP',
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+    hash: 'SHA-1',
+  } as const;
+  const pair = await crypto.subtle.generateKey(RSA_PARAMS, true, ['encrypt', 'decrypt']);
+  const memberPubB64 = bytesToBase64(new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey)));
+
+  const orgKey = crypto.getRandomValues(new Uint8Array(64));
+  const wrapped = await rsaWrapOrgKeyForMember(orgKey, memberPubB64);
+  assert.ok(wrapped.startsWith('4.'));
+
+  const { authedFetch, calls } = stubFetch({});
+  await confirmOrgUser(authedFetch, 'org1', 'ou1', wrapped);
+  assert.equal(calls[0].path, '/api/organizations/org1/users/ou1/confirm');
+  assert.equal(calls[0].body.key, wrapped);
+
+  const unwrapped = await unwrapOrgKey(calls[0].body.key, pair.privateKey);
+  assert.deepEqual(Array.from(unwrapped), Array.from(orgKey));
+});

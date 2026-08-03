@@ -2,7 +2,9 @@ import { useMemo, useState } from 'preact/hooks';
 import { useLocation } from 'wouter';
 import type { Profile } from '@/lib/types';
 import type { AuthedFetch } from '@/lib/api/shared';
-import { getProfileOrganizations, ORGANIZATION_TYPE_OWNER } from '@/lib/api/organizations';
+import { getProfileOrganizations, getUserPublicKey, ORGANIZATION_TYPE_OWNER, type OrgMember } from '@/lib/api/organizations';
+import { getFingerprintPhrase } from '@/lib/api/auth-requests';
+import { base64ToBytes } from '@/lib/crypto';
 import { useOrgMemberActions } from '@/hooks/useOrgMemberActions';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { t } from '@/lib/i18n';
@@ -40,11 +42,13 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
     [props.profile, props.orgId]
   );
   const [tab] = useState<'members'>('members');
-  const { members, loading, error, invite, resend, remove } = useOrgMemberActions({
+  const { members, loading, error, invite, resend, remove, confirm } = useOrgMemberActions({
     authedFetch: props.authedFetch,
     orgId: props.orgId,
+    orgKeys: props.orgKeys,
     onNotify: props.onNotify,
   });
+  const orgKeyReady = !!props.orgKeys[props.orgId];
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteInput, setInviteInput] = useState('');
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
@@ -84,6 +88,36 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
       props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_resend_failed'));
     } finally {
       setBusyMemberId(null);
+    }
+  };
+
+  const [confirmTarget, setConfirmTarget] = useState<{ member: OrgMember; publicKey: string; phrase: string } | null>(null);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+
+  const openConfirmDialog = async (member: OrgMember) => {
+    if (busyMemberId || !member.userId) return;
+    setBusyMemberId(member.id);
+    try {
+      const publicKey = await getUserPublicKey(props.authedFetch, member.userId);
+      const phrase = await getFingerprintPhrase(member.email, base64ToBytes(publicKey));
+      setConfirmTarget({ member, publicKey, phrase });
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_confirm_failed'));
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
+  const submitConfirm = async () => {
+    if (!confirmTarget || confirmSubmitting) return;
+    setConfirmSubmitting(true);
+    try {
+      await confirm(confirmTarget.member, confirmTarget.publicKey);
+      setConfirmTarget(null);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_confirm_failed'));
+    } finally {
+      setConfirmSubmitting(false);
     }
   };
 
@@ -171,6 +205,17 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
                           {t('txt_org_resend_button')}
                         </button>
                       )}
+                      {member.status === 1 && !!member.userId && (
+                        <button
+                          type="button"
+                          className="btn btn-primary small"
+                          disabled={!orgKeyReady || busyMemberId === member.id}
+                          title={orgKeyReady ? undefined : t('txt_org_key_unavailable')}
+                          onClick={() => void openConfirmDialog(member)}
+                        >
+                          {t('txt_org_confirm_button')}
+                        </button>
+                      )}
                       {member.type !== ORGANIZATION_TYPE_OWNER && (
                         <button
                           type="button"
@@ -234,6 +279,28 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
           if (!removeSubmitting) setRemoveTarget(null);
         }}
       />
+
+      <ConfirmDialog
+        open={!!confirmTarget}
+        title={t('txt_org_confirm_title')}
+        message={t('txt_org_confirm_fingerprint_help')}
+        confirmText={t('txt_org_confirm_button')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={confirmSubmitting}
+        cancelDisabled={confirmSubmitting}
+        onConfirm={() => void submitConfirm()}
+        onCancel={() => {
+          if (!confirmSubmitting) setConfirmTarget(null);
+        }}
+      >
+        {confirmTarget && (
+          <div className="auth-request-fingerprint">
+            <span>{t('txt_org_confirm_fingerprint_label')}</span>
+            <strong>{confirmTarget.phrase}</strong>
+            <span>{confirmTarget.member.email}</span>
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
