@@ -25,6 +25,9 @@ export interface OrganizationCollectionSummary {
   name: string;
 }
 
+// Owner/member role, mirroring the server's organization_users.role (0 = owner).
+export const ORGANIZATION_TYPE_OWNER = 0;
+
 export interface OrgMember {
   id: string; // orgUserId
   userId: string | null;

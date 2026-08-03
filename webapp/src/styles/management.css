@@ -1836,6 +1836,19 @@
   color: #667085;
 }
 
+.table-row-clickable {
+  cursor: pointer;
+}
+
+.table-row-clickable:hover {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.table-row-clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
 .authorized-devices-table {
   table-layout: fixed;
 }

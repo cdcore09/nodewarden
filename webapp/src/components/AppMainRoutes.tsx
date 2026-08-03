@@ -8,6 +8,7 @@ import type { AdminBackupImportResponse, AdminBackupRunResponse, AdminBackupSett
 import type { AuditLogFilters } from '@/lib/api/admin';
 import type { CiphersImportPayload } from '@/lib/api/vault';
 import type { CreateOrganizationInput } from '@/lib/api/organizations';
+import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
 import type { AccountPasskeyCredential, AdminInvite, AdminUser, AuditLogListResult, AuditLogSettings, AuthRequest, AuthorizedDevice, Cipher, Collection, CustomEquivalentDomain, DomainRules, Folder as VaultFolder, Profile, Send, SendDraft, SessionState, TwoFactorPasskeySettings, VaultDraft, YubiKeyOtpSettings } from '@/lib/types';
 import type { ExportRequest } from '@/lib/export-formats';
@@ -25,6 +26,7 @@ const LogCenterPage = lazy(() => import('@/components/LogCenterPage'));
 const BackupCenterPage = lazy(() => import('@/components/BackupCenterPage'));
 const ImportPage = lazy(() => import('@/components/ImportPage'));
 const OrganizationsPage = lazy(() => import('@/components/OrganizationsPage'));
+const OrganizationDetailPage = lazy(() => import('@/components/OrganizationDetailPage'));
 
 function RouteContentFallback() {
   return <LoadingState card lines={5} />;
@@ -76,6 +78,8 @@ export interface AppMainRoutesProps {
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
   onCreateOrganization: (input: CreateOrganizationInput) => Promise<{ id: string }>;
+  authedFetch: AuthedFetch;
+  orgKeys: Record<string, Uint8Array>;
   onThemePreferenceChange: (preference: 'system' | 'light' | 'dark') => void;
   onImport: (
     payload: CiphersImportPayload,
@@ -263,6 +267,23 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
         ) : props.profileLoading ? (
           <LoadingState card lines={5} />
         ) : null}
+      </Route>
+      <Route path="/organizations/:id">
+        {(params: { id: string }) =>
+          props.profile ? (
+            <Suspense fallback={<RouteContentFallback />}>
+              <OrganizationDetailPage
+                orgId={params.id}
+                profile={props.profile}
+                authedFetch={props.authedFetch}
+                orgKeys={props.orgKeys}
+                onNotify={props.onNotify}
+              />
+            </Suspense>
+          ) : props.profileLoading ? (
+            <LoadingState card lines={5} />
+          ) : null
+        }
       </Route>
       <Route path="/vault/totp">
         <Suspense fallback={<RouteContentFallback />}>

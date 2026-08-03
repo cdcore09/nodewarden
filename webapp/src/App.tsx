@@ -2001,11 +2001,13 @@ export default function App() {
   const routeLocation = hashPath.startsWith('/') ? normalizedHashPath : normalizedLocation;
   const effectiveLocation = routeLocation;
   const publicSendMatch = effectiveLocation.match(/^\/send\/([^/]+)(?:\/([^/]+))?\/?$/i);
+  const orgDetailMatch = routeLocation.match(/^\/organizations\/[^/]+$/);
   const isRecoverTwoFactorRoute = effectiveLocation === '/recover-2fa';
   const isPublicSendRoute = !!publicSendMatch;
+  const isOrgDetailRoute = !!orgDetailMatch;
   const isMalformedSendRoute = /^\/send(?:\/|$)/i.test(effectiveLocation) && !publicSendMatch;
   const isKnownAuthRoute = AUTH_ROUTES.has(routeLocation) || isPublicSendRoute || isRecoverTwoFactorRoute;
-  const isKnownAppRoute = APP_ROUTES.has(routeLocation) || isPublicSendRoute || isImportHashRoute;
+  const isKnownAppRoute = APP_ROUTES.has(routeLocation) || isPublicSendRoute || isImportHashRoute || isOrgDetailRoute;
   const isUnknownRoute = isMalformedSendRoute || (phase === 'app' ? !isKnownAppRoute : !isKnownAuthRoute && !APP_ROUTES.has(routeLocation));
   const isImportRoute = routeLocation === IMPORT_ROUTE || IMPORT_ROUTE_ALIASES.has(routeLocation);
   const showSidebarToggle = mobileLayout && location === '/sends';
@@ -2043,6 +2045,7 @@ export default function App() {
     if (location === '/generator') return t('txt_password_generator');
     if (location === '/sends') return t('nav_sends');
     if (location === '/organizations') return t('txt_org_page_title');
+    if (location.startsWith('/organizations/')) return t('txt_org_page_title');
     if (location === '/admin') return t('nav_admin_panel');
     if (location === '/logs') return t('nav_log_center');
     if (location === LEGACY_DEVICE_MANAGEMENT_ROUTE || location === DEVICE_MANAGEMENT_ROUTE) return t('nav_device_management');
@@ -2129,6 +2132,8 @@ export default function App() {
     onNavigate: navigate,
     onLogout: handleLogout,
     onNotify: pushToast,
+    authedFetch,
+    orgKeys: orgKeysCache,
     onCreateOrganization: async (input: CreateOrganizationInput) => {
       const result = await createOrganization(authedFetch, input);
       await profileQuery.refetch();
