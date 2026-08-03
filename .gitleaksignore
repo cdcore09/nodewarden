@@ -1,6 +1,0 @@
-# Gitleaks false positives — fake test placeholders in a manual HTTP smoke script.
-# These are literal org-key placeholders (e.g. `key: '4.smoke-wrapped'`) used to
-# exercise the org-cipher collection-reassignment endpoint against a dev server;
-# they are NOT real secrets. Same pattern as scripts/org-sharing-smoke.mjs.
-fbe20f9bd783b1b29bb9fa47a2654c0a82d8e036:scripts/org-collections-reassign-smoke.mjs:generic-api-key:158
-fbe20f9bd783b1b29bb9fa47a2654c0a82d8e036:scripts/org-collections-reassign-smoke.mjs:generic-api-key:252
