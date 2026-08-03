@@ -15,14 +15,15 @@ All Phase 2 obligations below were addressed and verified (branch `feat/organiza
 
 - **Invite-code ↔ membership linkage:** ✅ discharged. `invites` now carries `org_user_id` (migration `0003_invite_org_user.sql`; `storage-schema.ts` bootstrap keeps parity); `revokeInvitesForOrgUser` (`src/services/storage-admin-repo.ts`) revokes every prior active code for the `orgUserId` before resend mints a fresh linked code, and removal of an `invited`/`accepted` member also revokes their outstanding code via the same helper. Covered by `scripts/invite-linkage.test.ts`.
 
-## Phase 3b (org ciphers, sharing enforcement) — Tasks 1-9 DISCHARGED 2026-08-02; Task 10 found one BLOCKING issue (see below, unresolved)
+## Phase 3b (org ciphers, sharing enforcement) — DISCHARGED 2026-08-02
 
 All Phase 3b obligations below (from the original Phase 1 ledger) were addressed and verified
-(branch `feat/organizations-phase-3b`). However, Task 10's end-to-end sharing smoke — the first test in
-this phase to exercise `POST /api/ciphers` through the actual HTTP handler with a realistic client
-request, rather than the storage layer directly — found a real, previously-undetected defect that breaks
-org-cipher collection assignment on create. See "Task 10 — BLOCKING FINDING" below; it is intentionally
-left unresolved pending review, not silently patched.
+(branch `feat/organizations-phase-3b`). Task 10's end-to-end sharing smoke — the first test in this phase
+to exercise `POST /api/ciphers` through the actual HTTP handler with a realistic client request, rather
+than the storage layer directly — found and fixed one real, previously-undetected defect that broke
+org-cipher collection assignment on create. See "Task 10 — found and fixed" below for the full writeup.
+`scripts/org-sharing-smoke.mjs` passes all 26 checks (`ALL CHECKS PASSED`) against fresh local
+`wrangler dev` + D1 as of commit `4a99565`.
 
 - **BLOCKING PREREQUISITE — `organizationId` is silently dropped on every Cipher:** ✅ discharged (Task 1). `src/services/storage-cipher-repo.ts`'s `selectCipherColumns()` now includes `organization_id`, `parseCipherRow` maps it to `organizationId`, and `saveCipher`'s insert/update column list threads it through.
 - **Org-cipher cleanup on org delete:** ✅ discharged (Task 8). `deleteOrganization`'s delete flow explicitly removes org-owned ciphers (and their attachment/`cipher_collections` rows) via `deleteOrgCiphers`.
@@ -32,34 +33,34 @@ left unresolved pending review, not silently patched.
 - **Share/add-to-collection org consistency:** ✅ discharged (Task 6). The share/add-to-collection endpoint validates `collection.orgId === cipher.organizationId` before linking.
 - **`hidePasswords` enforcement:** ✅ discharged. **DECISION: CLIENT-enforced.** The server surfaces the `hidePasswords` flag in sync/collection responses but does NOT strip password fields from cipher responses server-side. This matches Vaultwarden's behavior and keeps the cipher response path simple; enforcement is left to the client.
 
-### Task 10 — BLOCKING FINDING: `handleCreateCipher` drops `collectionIds` on org-cipher create (NOT discharged)
+### Task 10 — found and fixed: `handleCreateCipher` was dropping `collectionIds` on org-cipher create
 
 The end-to-end sharing smoke (`scripts/org-sharing-smoke.mjs`) found a real product bug, distinct from
 everything above (all of which was verified only at the storage/unit layer, never through the actual
-`POST /api/ciphers` handler with a realistic client request body). **This is unresolved** — it was
-intentionally left unfixed per the task's "stop and report, do not paper over" instruction, pending
-review.
+`POST /api/ciphers` handler with a realistic client request body). It was initially reported without a
+fix (per the task's "stop and report, do not paper over" instruction), then fixed and re-verified in the
+same task after review/authorization. **Discharged as of commit `4a99565`.**
 
-`handleCreateCipher` (`src/handlers/ciphers.ts`, ~line 1049) reads `collectionIds` off `cipherData`
+`handleCreateCipher` (`src/handlers/ciphers.ts`, ~line 1049) was reading `collectionIds` off `cipherData`
 (i.e. `body.cipher` when the client sends the standard nested `{ cipher: {...}, collectionIds: [...] }`
 shape used by official Bitwarden clients — and specified verbatim in this phase's own task-10 brief).
 But the real Bitwarden contract puts `collectionIds` as a **sibling** of `cipher`, at the top level of
-the request body, not nested inside it. `handleShareCipher` (same file, ~line 1303) already reads it
-correctly from `body`. The two handlers disagree on where to look, and `handleCreateCipher` is the one
-that's wrong.
+the request body, not nested inside it. `handleShareCipher` (same file, ~line 1303) already read it
+correctly from `body`. The two handlers disagreed on where to look, and `handleCreateCipher` was the one
+that was wrong.
 
-Effect: a client creating an org cipher and assigning it to a collection in one `POST /api/ciphers` call
-(the standard flow) has its `collectionIds` silently discarded — `requestedCollectionIds` evaluates to
-`[]`. The cipher IS created with `organizationId` set (that part works), but no `cipher_collections` row
-is ever inserted. Consequences:
-- A non-owner member creating an org cipher gets erroneously rejected with `An organization member must
+Effect (before the fix): a client creating an org cipher and assigning it to a collection in one
+`POST /api/ciphers` call (the standard flow) had its `collectionIds` silently discarded —
+`requestedCollectionIds` evaluated to `[]`. The cipher WAS created with `organizationId` set (that part
+worked), but no `cipher_collections` row was ever inserted. Consequences:
+- A non-owner member creating an org cipher was erroneously rejected with `An organization member must
   assign the item to at least one collection` (400), even though they specified a collection correctly.
-- An owner creating an org cipher into a collection gets a silent no-op on the collection assignment —
-  the cipher is created, but unreachable to every non-owner member (owners bypass the collection-grant
-  check, so they don't notice). This breaks the core deliverable of Phase 3b for anything created via
+- An owner creating an org cipher into a collection got a silent no-op on the collection assignment —
+  the cipher was created, but unreachable to every non-owner member (owners bypass the collection-grant
+  check, so they didn't notice). This broke the core deliverable of Phase 3b for anything created via
   `POST /api/ciphers` directly into a collection.
 
-Reproduced in isolation (fresh local D1, `wrangler dev`):
+Reproduced in isolation (fresh local D1, `wrangler dev`), before the fix:
 ```
 POST /api/ciphers
 { "cipher": { "type": 1, "name": "0.iv-x|ct-x", "login": {...}, "organizationId": "<orgId>" },
@@ -72,8 +73,14 @@ No existing test (unit or handler-level) exercised this path — the storage-lay
 `storage.addCipherToCollections` directly, bypassing the handler's request parsing entirely, so the gap
 was invisible until this end-to-end smoke.
 
-**Suggested fix** (not applied): change line ~1049 to read `collectionIds`/`CollectionIds` off `body`
-instead of `cipherData`, mirroring `handleShareCipher`'s already-correct pattern exactly.
+**Fix applied** (`src/handlers/ciphers.ts`, commit `4a99565`): read `collectionIds`/`CollectionIds` off
+`body` instead of `cipherData`, mirroring `handleShareCipher`'s already-correct pattern exactly. One-line
+change plus an explanatory comment; no other logic touched (the downstream
+membership/org-consistency/write-permission validation in `requireOrgCipherWriteAccess` was already
+correct — it just needed the correctly-parsed array). Re-ran `scripts/org-sharing-smoke.mjs` against a
+fresh local `wrangler dev` + D1 after the fix: all 26 checks pass, `ALL CHECKS PASSED`, exit 0. `npm run
+test:orgs` (88/88), `test:config-compatibility`, `test:web-crypto`, `test:webauthn-connectors`, and
+`npx tsc --noEmit` all stayed green after the fix.
 
 ### Known limitation: `folder_id` is a single shared column, but folders are personal (Task 4 ledger)
 
