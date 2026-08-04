@@ -296,6 +296,18 @@ export async function decryptVaultCore(args: DecryptVaultCoreArgs): Promise<Decr
         );
       }
 
+      if (cipher.apiKey) {
+        nextCipher.apiKey = await decryptCipherObjectFields(
+          cipher.apiKey,
+          ['provider', 'keyId', 'key', 'expirationDate'],
+          itemEnc,
+          itemMac,
+          userEnc,
+          userMac,
+          canFallbackToUserKey
+        );
+      }
+
       if (cipher.fields) {
         nextCipher.fields = await Promise.all(
           cipher.fields.map(async (field) => ({
