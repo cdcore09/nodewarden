@@ -10,6 +10,7 @@ const STR = {
   copy: 'Copy',
   regenerate: 'Regenerate',
   history: 'This session',
+  historyEmpty: 'Regenerated values land here so nothing is lost by a reroll.',
   strength: ['very weak', 'weak', 'fair', 'strong', 'very strong'],
   ambiguous: 'no ambiguous',
 };
@@ -60,6 +61,8 @@ export default function NextGeneratorPage(props: NextGeneratorPageProps) {
 
   return (
     <div className="nx-list nx-genpage">
+      <div className="gen-grid">
+      <div className="gen-main">
       <div className="nx-seg" role="tablist" style={{ alignSelf: 'flex-start' }}>
         {(['password', 'passphrase', 'pin'] as PageMode[]).map((option) => (
           <button
@@ -79,7 +82,15 @@ export default function NextGeneratorPage(props: NextGeneratorPageProps) {
         ))}
       </div>
 
-      <div className="gen-candidate nx-data" aria-live="polite">{candidate}</div>
+      <button
+        type="button"
+        className="gen-candidate nx-data"
+        aria-live="polite"
+        title={STR.copy}
+        onClick={() => props.onCopyValue(candidate, STR.modes[mode])}
+      >
+        {candidate}
+      </button>
 
       <div className="nx-genparams" style={{ alignSelf: 'stretch' }}>
         {mode === 'pin' ? (
@@ -121,22 +132,24 @@ export default function NextGeneratorPage(props: NextGeneratorPageProps) {
           {STR.regenerate}
         </button>
       </div>
+      </div>
 
-      {history.length > 0 && (
-        <div className="nx-field" style={{ alignSelf: 'stretch' }}>
-          <span className="nx-overline">{STR.history}</span>
-          {history.map((value, index) => (
-            <div className="nx-kv" key={index} style={{ padding: '4px 0' }}>
-              <span className="kval" style={{ fontSize: 'var(--nx-text-sm)', color: 'var(--nx-ink-muted)' }}>
-                {value}
-                <span className="kacts">
-                  <button type="button" className="nx-iconbtn" title={STR.copy} onClick={() => props.onCopyValue(value, STR.modes[mode])}>⧉</button>
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <aside className="gen-side">
+        <div className="nx-overline">{STR.history}</div>
+        {history.length === 0 && <div className="nx-help">{STR.historyEmpty}</div>}
+        {history.map((value, index) => (
+          <button
+            key={index}
+            type="button"
+            className="gen-hist nx-data"
+            title={STR.copy}
+            onClick={() => props.onCopyValue(value, STR.modes[mode])}
+          >
+            {value}
+          </button>
+        ))}
+      </aside>
+      </div>
     </div>
   );
 }

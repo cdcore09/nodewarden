@@ -106,21 +106,22 @@ export default function NextAuditPage(props: NextAuditPageProps) {
       </div>
 
       {report && (
-        <div style={{ display: 'flex', gap: 'var(--nx-sp-2)', flexWrap: 'wrap', marginBottom: 'var(--nx-sp-4)' }}>
+        <div className="audit-stats">
           {([
-            ['all', STR.all, findings.length],
-            ['exposed', STR.exposed, report.exposedCount],
-            ['reused', STR.reused, report.reusedCount],
-            ['weak', STR.weak, report.weakCount],
-          ] as Array<[Filter, string, number]>).map(([key, label, count]) => (
+            ['all', STR.all, findings.length, ''],
+            ['exposed', STR.exposed, report.exposedCount, 'danger'],
+            ['reused', STR.reused, report.reusedCount, 'warn'],
+            ['weak', STR.weak, report.weakCount, 'warn'],
+          ] as Array<[Filter, string, number, string]>).map(([key, label, count, tone]) => (
             <button
               key={key}
               type="button"
-              className={`nx-btn ghost${filter === key ? ' tab-on' : ''}`}
+              className={`audit-stat${tone && count > 0 ? ` ${tone}` : ''}${filter === key ? ' on' : ''}`}
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
             >
-              {label} <span className="nx-kbd" style={{ minWidth: 22 }}>{count}</span>
+              <span className="n nx-data">{count}</span>
+              <span className="l">{label}</span>
             </button>
           ))}
         </div>

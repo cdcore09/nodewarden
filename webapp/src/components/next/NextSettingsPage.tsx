@@ -67,7 +67,8 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
 
   return (
     <div className="nx-list nx-settings">
-      <div className="set-section">
+      <div className="set-grid">
+      <div className="set-section set-card">
         <div className="nx-overline">{STR.appearance}</div>
         <Row label={STR.theme}>
           <select
@@ -132,7 +133,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
         </Row>
       </div>
 
-      <div className="set-section">
+      <div className="set-section set-card">
         <div className="nx-overline">{STR.session}</div>
         <Row label={STR.lockTimeout}>
           <select
@@ -158,23 +159,26 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
         </Row>
       </div>
 
-      <div className="set-section">
+      <div className="set-section set-card set-card-wide">
         <div className="nx-overline">{STR.security}</div>
         <div className="nx-help" style={{ marginBottom: 'var(--nx-sp-2)' }}>{STR.securityHelp}</div>
-        {([
-          [STR.masterPassword, '/settings/account'],
-          [STR.twoStep, '/settings/account'],
-          [STR.keys, '/settings/account'],
-          [STR.devices, '/settings/security/device-management'],
-          [STR.domainRules, '/settings/domain-rules'],
-          [STR.backup, '/backup'],
-          [STR.admin, '/admin'],
-          [STR.logs, '/logs'],
-        ] as Array<[string, string]>).map(([label, path]) => (
-          <button key={label} type="button" className="set-link" onClick={() => props.navigate(path)}>
-            {label} <span aria-hidden="true">→</span>
-          </button>
-        ))}
+        <div className="set-links">
+          {([
+            [STR.masterPassword, '/settings/account'],
+            [STR.twoStep, '/settings/account'],
+            [STR.keys, '/settings/account'],
+            [STR.devices, '/settings/security/device-management'],
+            [STR.domainRules, '/settings/domain-rules'],
+            [STR.backup, '/backup'],
+            [STR.admin, '/admin'],
+            [STR.logs, '/logs'],
+          ] as Array<[string, string]>).map(([label, path]) => (
+            <button key={label} type="button" className="set-link" onClick={() => props.navigate(path)}>
+              {label} <span aria-hidden="true">→</span>
+            </button>
+          ))}
+        </div>
+      </div>
       </div>
     </div>
   );
