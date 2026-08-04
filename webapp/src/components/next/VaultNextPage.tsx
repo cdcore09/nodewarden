@@ -107,6 +107,7 @@ interface VaultNextPageProps {
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onShare: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
   onUpdateCollections: (cipher: Cipher, collectionIds: string[]) => Promise<void>;
+  onUnshare: (cipher: Cipher) => Promise<void>;
   onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
   shareOrganizations: Array<{ id: string; name: string }>;
   onDelete: (cipher: Cipher) => Promise<void>;
@@ -532,6 +533,18 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     try {
       if (shareMode === 'manage') await props.onUpdateCollections(cipher, collectionIds);
       else await props.onShare(cipher, orgId, collectionIds);
+      setShareOpen(false);
+    } catch { /* hook toasts its own error */ } finally {
+      setShareSubmitting(false);
+    }
+  };
+
+  const submitUnshare = async () => {
+    const cipher = openCipher;
+    if (!cipher || shareSubmitting) return;
+    setShareSubmitting(true);
+    try {
+      await props.onUnshare(cipher);
       setShareOpen(false);
     } catch { /* hook toasts its own error */ } finally {
       setShareSubmitting(false);
@@ -1234,6 +1247,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           mode={shareMode}
           initialOrgId={shareMode === 'manage' ? openCipher.organizationId || undefined : undefined}
           initialCollectionIds={shareMode === 'manage' ? openCipher.collectionIds || [] : undefined}
+          onUnshare={shareMode === 'manage' ? () => void submitUnshare() : undefined}
         />
       )}
 

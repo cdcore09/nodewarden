@@ -940,3 +940,10 @@ details.nx-details > .details-body {
 .nw-next .shared-note { align-self: center; }
 .nw-next .nx-menu .mrow.is-static { color: var(--nx-ink-faint); cursor: default; }
 .nw-next .nx-menu .mrow.is-static:hover { background: transparent; }
+
+/* slice 12: unshare affordance inside the manage-sharing dialog */
+.nw-next .nx-dialog .unshare-link {
+  align-self: flex-start;
+  margin-top: var(--nx-sp-2);
+  color: var(--nx-danger);
+}

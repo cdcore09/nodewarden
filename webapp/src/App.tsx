@@ -2235,6 +2235,7 @@ export default function App() {
     onUpdateVaultItem: vaultSendActions.updateVaultItem,
     onShareVaultItem: vaultSendActions.shareVaultItem,
     onUpdateVaultItemCollections: vaultSendActions.updateVaultItemCollections,
+    onUnshareVaultItem: vaultSendActions.unshareVaultItem,
     onLoadShareCollections: vaultSendActions.loadShareCollections,
     shareOrganizations: profile ? getProfileOrganizations(profile).map((o) => ({ id: o.id, name: o.name })) : [],
     onDeleteVaultItem: vaultSendActions.deleteVaultItem,
@@ -2546,6 +2547,7 @@ export default function App() {
           onUpdate={effectiveMainRoutesProps.onUpdateVaultItem}
           onShare={effectiveMainRoutesProps.onShareVaultItem}
           onUpdateCollections={effectiveMainRoutesProps.onUpdateVaultItemCollections}
+          onUnshare={effectiveMainRoutesProps.onUnshareVaultItem}
           onLoadShareCollections={effectiveMainRoutesProps.onLoadShareCollections}
           shareOrganizations={effectiveMainRoutesProps.shareOrganizations}
           onDelete={effectiveMainRoutesProps.onDeleteVaultItem}

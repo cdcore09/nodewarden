@@ -13,6 +13,11 @@ const STR = {
   manageConsequence: 'Members see this item if they have access to any checked collection. At least one is required — an item with no collection would be unreachable.',
   save: 'Save',
   oneOrg: 'An item belongs to one organization — its data is encrypted under that organization’s key. To share it with another organization too, duplicate the item and share the copy.',
+  makePersonal: 'Move to personal vault…',
+  unshareTitle: (org: string) => `Remove from ${org || 'the organization'}?`,
+  unshareBody: 'The item moves back to your personal vault, re-encrypted under your key. Organization members lose access immediately. Only the person who originally shared it can do this.',
+  unshareConfirm: 'Move to personal vault',
+  back: 'Back',
   organization: 'Organization',
   collections: 'Collections',
   loading: 'Loading collections…',
@@ -35,10 +40,13 @@ interface ShareDialogProps {
   mode?: 'share' | 'manage';
   initialOrgId?: string;
   initialCollectionIds?: string[];
+  /** manage mode: move the item back to the personal vault (creator only) */
+  onUnshare?: () => void;
 }
 
 export default function ShareDialog(props: ShareDialogProps) {
   const manage = props.mode === 'manage';
+  const [unshareStep, setUnshareStep] = useState(false);
   const [orgId, setOrgId] = useState(props.initialOrgId || props.organizations[0]?.id || '');
   const [collections, setCollections] = useState<Array<{ id: string; name: string | null }> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -94,13 +102,32 @@ export default function ShareDialog(props: ShareDialogProps) {
         aria-label={STR.title(props.cipherName)}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === 'Escape' && !props.submitting) { e.preventDefault(); e.stopPropagation(); props.onCancel(); }
+          if (e.key === 'Escape' && !props.submitting) {
+            e.preventDefault(); e.stopPropagation();
+            if (unshareStep) setUnshareStep(false);
+            else props.onCancel();
+          }
           if (e.key === 'Enter' && canConfirm && !(e.target instanceof HTMLButtonElement)) {
             e.preventDefault();
             props.onConfirm(orgId, [...selected]);
           }
         }}
       >
+        {unshareStep ? (
+          <>
+            <h3>{STR.unshareTitle(props.organizations.find((o) => o.id === orgId)?.name || '')}</h3>
+            <div className="nx-help">{STR.unshareBody}</div>
+            <div className="dfoot">
+              <button type="button" className="nx-btn ghost" disabled={props.submitting} onClick={() => setUnshareStep(false)}>
+                {STR.back} <span className="nx-kbd">esc</span>
+              </button>
+              <button type="button" className="nx-btn danger-fill" disabled={props.submitting} onClick={() => props.onUnshare?.()}>
+                {props.submitting ? STR.sharing : STR.unshareConfirm}
+              </button>
+            </div>
+          </>
+        ) : (
+        <>
         <h3>{manage ? STR.manageTitle(props.cipherName) : STR.title(props.cipherName)}</h3>
 
         {!manage && props.organizations.length > 1 && (
@@ -159,6 +186,13 @@ export default function ShareDialog(props: ShareDialogProps) {
             {props.submitting ? STR.sharing : manage ? STR.save : STR.share} <span className="nx-kbd on-fill">↵</span>
           </button>
         </div>
+        {manage && props.onUnshare && (
+          <button type="button" className="nx-help accent-link unshare-link" onClick={() => setUnshareStep(true)}>
+            {STR.makePersonal}
+          </button>
+        )}
+        </>
+        )}
       </div>
     </div>
   );
