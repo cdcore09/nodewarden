@@ -43,6 +43,7 @@ export interface BitwardenCipherInput {
   bankAccount?: Record<string, unknown> | null;
   driversLicense?: Record<string, unknown> | null;
   passport?: Record<string, unknown> | null;
+  apiKey?: Record<string, unknown> | null;
   [key: string]: unknown;
 }
 
@@ -122,6 +123,7 @@ export function normalizeBitwardenImport(raw: unknown): CiphersImportPayload {
       bankAccount: item?.bankAccount ?? null,
       driversLicense: item?.driversLicense ?? null,
       passport: item?.passport ?? null,
+      apiKey: item?.apiKey ?? null,
     });
     const folderId = txt(item?.folderId);
     if (!folderId) continue;
