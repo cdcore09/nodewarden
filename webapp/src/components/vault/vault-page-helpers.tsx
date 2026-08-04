@@ -457,6 +457,14 @@ export function buildCipherDuplicateSignature(cipher: Cipher): string {
           expirationDate: valueOrFallback(cipher.passport.decExpirationDate ?? cipher.passport.expirationDate),
         }
       : null,
+    apiKey: cipher.apiKey
+      ? {
+          provider: valueOrFallback(cipher.apiKey.decProvider ?? cipher.apiKey.provider),
+          keyId: valueOrFallback(cipher.apiKey.decKeyId ?? cipher.apiKey.keyId),
+          key: valueOrFallback(cipher.apiKey.decKey ?? cipher.apiKey.key),
+          expirationDate: valueOrFallback(cipher.apiKey.decExpirationDate ?? cipher.apiKey.expirationDate),
+        }
+      : null,
     secureNoteType: cipher.secureNote?.type ?? null,
     fields: (cipher.fields || []).map((field) => ({
       type: field.type ?? null,
@@ -669,6 +677,12 @@ export function draftFromCipher(cipher: Cipher): VaultDraft {
     draft.passportIssuingAuthority = cipher.passport.decIssuingAuthority || '';
     draft.passportIssueDate = cipher.passport.decIssueDate || '';
     draft.passportExpirationDate = cipher.passport.decExpirationDate || '';
+  }
+  if (cipher.apiKey) {
+    draft.apiKeyProvider = cipher.apiKey.decProvider || '';
+    draft.apiKeyKeyId = cipher.apiKey.decKeyId || '';
+    draft.apiKeySecret = cipher.apiKey.decKey || '';
+    draft.apiKeyExpirationDate = cipher.apiKey.decExpirationDate || '';
   }
   draft.customFields = (cipher.fields || []).map((field) => ({
     type: parseFieldType(field.type),
