@@ -1590,6 +1590,39 @@ export async function shareCipher(
   return (await parseJson<Cipher>(resp))!;
 }
 
+// POST /api/ciphers/:id/unshare — the reverse of shareCipher: move an org
+// cipher back to the creator's personal vault, re-encrypted under the user
+// key. Org-key-only password-history entries are dropped for the same
+// key-switch reason as shareCipher.
+export async function unshareCipher(
+  authedFetch: AuthedFetch,
+  session: SessionState,
+  cipher: Cipher,
+  draft: VaultDraft,
+  orgKeys: Record<string, Uint8Array> | undefined
+): Promise<Cipher> {
+  if (!cipher.organizationId) throw new Error('Item is not in an organization');
+  const decryptedHistory = Array.isArray(cipher.passwordHistory)
+    ? cipher.passwordHistory.filter((entry) => typeof entry?.decPassword === 'string')
+    : null;
+  const personalShape: Cipher = {
+    ...cipher,
+    organizationId: null,
+    key: null,
+    passwordHistory: decryptedHistory && decryptedHistory.length ? decryptedHistory : null,
+  };
+  const payload = await buildCipherPayload(session, draft, personalShape, orgKeys);
+  payload.organizationId = null;
+
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(cipher.id)}/unshare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cipher: payload }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Move to personal vault failed'));
+  return (await parseJson<Cipher>(resp))!;
+}
+
 // PUT /api/ciphers/:id/collections — replace which of its org's collections an
 // EXISTING org cipher belongs to. No re-encryption: the cipher stays under the
 // same org key; only cipher_collections membership is rewritten server-side.

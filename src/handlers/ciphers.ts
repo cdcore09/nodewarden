@@ -1517,6 +1517,127 @@ export async function handleUpdateCipherCollections(request: Request, env: Env, 
   return jsonResponse(cipherToResponse(updatedCipher, attachments, cipherResponseOptionsForRequest(request)));
 }
 
+// POST /api/ciphers/:id/unshare
+// The reverse of /share: move an ORG cipher back to the personal vault of its
+// original creator. The client sends the cipher re-encrypted under the
+// creator's personal key ({ cipher: {...} }); the server verifies the
+// requester IS that creator and can still write the cipher, then clears
+// organizationId and every cipher_collections row. Org members lose the item
+// on their next sync (notifyOrgCipherChange bumps them immediately).
+export async function handleUnshareCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const existingCipher = await storage.getCipher(id);
+
+  if (!existingCipher || !(await canWriteCipher(storage, userId, existingCipher))) {
+    return errorResponse('Cipher not found', 404);
+  }
+  if (!existingCipher.organizationId) {
+    return errorResponse('Cipher is not in an organization', 400);
+  }
+  // Ownership invariant: /share never changes userId, so the creator is still
+  // recorded on the row. Only that creator may pull the cipher back out —
+  // letting any write-granted member privatize an org item would silently
+  // remove it from everyone else's vault.
+  if (existingCipher.userId !== userId) {
+    return errorResponse('Only the item\'s original owner can move it back to their personal vault', 403);
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+  const cipherData = body.Cipher || body.cipher || {};
+
+  const incomingKey = readCipherProp<string | null>(cipherData, ['key', 'Key']);
+  if (incomingKey.present && !shouldAcceptCipherKey(incomingKey.value)) {
+    return errorResponse('Cipher key encryption is not supported by this server. Resync the client and try again.', 400);
+  }
+
+  const incomingFolderId = readCipherProp<string | null>(cipherData, ['folderId', 'FolderId']);
+  const incomingLogin = readCipherProp<CipherLogin | null>(cipherData, ['login', 'Login']);
+  const incomingCard = readCipherProp<CipherCard | null>(cipherData, ['card', 'Card']);
+  const incomingIdentity = readCipherProp<CipherIdentity | null>(cipherData, ['identity', 'Identity']);
+  const incomingSecureNote = readCipherProp<CipherSecureNote | null>(cipherData, ['secureNote', 'SecureNote']);
+  const incomingSshKey = readCipherProp<CipherSshKey | null>(cipherData, ['sshKey', 'SshKey']);
+  const incomingBankAccount = readCipherProp<CipherBankAccount | null>(cipherData, ['bankAccount', 'BankAccount']);
+  const incomingDriversLicense = readCipherProp<CipherDriversLicense | null>(cipherData, ['driversLicense', 'DriversLicense']);
+  const incomingPassport = readCipherProp<CipherPassport | null>(cipherData, ['passport', 'Passport']);
+  const incomingPasswordHistory = readCipherProp<PasswordHistory[] | null>(cipherData, ['passwordHistory', 'PasswordHistory']);
+  const nextType = Number(cipherData.type) || existingCipher.type;
+  const previousOrganizationId = existingCipher.organizationId;
+
+  // Same opaque passthrough merge as /share, with the server-controlled fields
+  // forced the other way: organizationId is cleared, userId stays the creator.
+  const cipher: Cipher = {
+    ...existingCipher,
+    ...cipherData,
+    id: existingCipher.id,
+    userId: existingCipher.userId,
+    organizationId: null,
+    type: nextType,
+    favorite: cipherData.favorite ?? existingCipher.favorite,
+    reprompt: cipherData.reprompt ?? existingCipher.reprompt,
+    createdAt: existingCipher.createdAt,
+    updatedAt: new Date().toISOString(),
+    archivedAt: existingCipher.archivedAt ?? null,
+    deletedAt: existingCipher.deletedAt,
+  };
+  if (incomingFolderId.present) {
+    cipher.folderId = normalizeOptionalId(incomingFolderId.value);
+  }
+  if (incomingKey.present) {
+    const normalizedIncomingKey = normalizeCipherKeyForStorage(incomingKey.value);
+    cipher.key = normalizedIncomingKey || null;
+  } else {
+    cipher.key = null;
+  }
+  cipher.login = nextType === 1 ? (incomingLogin.present ? (incomingLogin.value ?? null) : (existingCipher.login ?? null)) : null;
+  cipher.secureNote = nextType === 2 ? (incomingSecureNote.present ? (incomingSecureNote.value ?? null) : (existingCipher.secureNote ?? null)) : null;
+  cipher.card = nextType === 3 ? (incomingCard.present ? (incomingCard.value ?? null) : (existingCipher.card ?? null)) : null;
+  cipher.identity = nextType === 4 ? (incomingIdentity.present ? (incomingIdentity.value ?? null) : (existingCipher.identity ?? null)) : null;
+  cipher.sshKey = nextType === 5 ? (incomingSshKey.present ? (incomingSshKey.value ?? null) : (existingCipher.sshKey ?? null)) : null;
+  cipher.bankAccount = nextType === 6 ? (incomingBankAccount.present ? (incomingBankAccount.value ?? null) : ((existingCipher as any).bankAccount ?? null)) : null;
+  cipher.driversLicense = nextType === 7 ? (incomingDriversLicense.present ? (incomingDriversLicense.value ?? null) : ((existingCipher as any).driversLicense ?? null)) : null;
+  cipher.passport = nextType === 8 ? (incomingPassport.present ? (incomingPassport.value ?? null) : ((existingCipher as any).passport ?? null)) : null;
+  if (incomingPasswordHistory.present) {
+    cipher.passwordHistory = incomingPasswordHistory.value ?? null;
+  }
+  const incomingFields = getAliasedProp(cipherData, ['fields', 'Fields']);
+  if (incomingFields.present) {
+    cipher.fields = incomingFields.value ?? null;
+  }
+
+  cipher.collectionIds = [];
+  normalizeCipherForStorage(cipher);
+  const compatibilityError = validateCipherEncryptedFieldsForCompatibility(cipher);
+  if (compatibilityError) return errorResponse(compatibilityError, 400);
+
+  if (cipher.folderId) {
+    const folderOk = await verifyFolderOwnership(storage, cipher.folderId, userId);
+    if (!folderOk) return errorResponse('Folder not found', 404);
+  }
+
+  await storage.saveCipher(cipher);
+  await storage.setCipherCollections(cipher.id, []);
+
+  const revisionDate = await storage.updateRevisionDate(userId);
+  notifyVaultSyncForRequest(request, env, userId, revisionDate);
+  notifyCipherUpdateForRequest(request, env, cipher, revisionDate);
+  await notifyOrgCipherChange(env, storage, [previousOrganizationId], readActingDeviceIdentifier(request));
+
+  await writeCipherAudit(storage, request, userId, 'cipher.unshare', {
+    id: cipher.id,
+    organizationId: previousOrganizationId,
+  });
+
+  const attachments = await storage.getAttachmentsByCipher(cipher.id);
+  return jsonResponse(
+    cipherToResponse(cipher, attachments, cipherResponseOptionsForRequest(request))
+  );
+}
+
 // DELETE /api/ciphers/:id
 export async function handleDeleteCipher(request: Request, env: Env, userId: string, id: string): Promise<Response> {
   const storage = new StorageService(env.DB);

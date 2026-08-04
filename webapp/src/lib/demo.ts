@@ -1606,6 +1606,13 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       )));
       notify('success', t('txt_item_updated'));
     },
+    onUnshareVaultItem: async (cipher) => {
+      const revisionDate = new Date().toISOString();
+      state.setCiphers((prev) => prev.map((item) => (
+        item.id === cipher.id ? { ...item, organizationId: null, collectionIds: [], revisionDate } : item
+      )));
+      notify('success', t('txt_item_updated'));
+    },
     onUpdateVaultItemCollections: async (cipher, collectionIds) => {
       const revisionDate = new Date().toISOString();
       state.setCiphers((prev) => prev.map((item) => (
