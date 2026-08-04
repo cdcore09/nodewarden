@@ -1435,7 +1435,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
           setShareSelectedIds([]);
         }}
       >
-        {props.shareOrganizations.length > 1 && (
+        {props.shareOrganizations.length > 0 && (
           <label className="field">
             <span>{t('txt_org_share_org_label')}</span>
             <select
