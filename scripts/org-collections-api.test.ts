@@ -41,15 +41,18 @@ test('deleteOrgCollection DELETEs the collection endpoint', async () => {
   assert.equal(calls[0].method, 'DELETE');
 });
 
-test('getOrgCollectionUsers GETs grants and maps rows', async () => {
-  const { authedFetch, calls } = stubFetch({ data: [{ orgUserId: 'ou1', readOnly: true, hidePasswords: false }] });
+test('getOrgCollectionUsers GETs the bare grant array and maps id -> orgUserId', async () => {
+  // The server returns a bare array of {id, readOnly, hidePasswords}
+  // (org-collections.ts handleGetCollectionUsers).
+  const { authedFetch, calls } = stubFetch([{ id: 'ou1', readOnly: true, hidePasswords: false }]);
   const grants = await getOrgCollectionUsers(authedFetch, 'org1', 'c1');
   assert.equal(calls[0].path, '/api/organizations/org1/collections/c1/users');
   assert.equal(calls[0].method, 'GET');
   assert.deepEqual(grants, [{ orgUserId: 'ou1', readOnly: true, hidePasswords: false }]);
 });
 
-test('putOrgCollectionUsers PUTs {grants} full-replace', async () => {
+test('putOrgCollectionUsers PUTs {users:[{id,...}]} full-replace', async () => {
+  // parseCollectionGrantsRequest (org-shapes.ts) requires {users:[{id,...}]}.
   const { authedFetch, calls } = stubFetch({});
   await putOrgCollectionUsers(authedFetch, 'org1', 'c1', [
     { orgUserId: 'ou1', readOnly: false, hidePasswords: false },
@@ -58,9 +61,9 @@ test('putOrgCollectionUsers PUTs {grants} full-replace', async () => {
   assert.equal(calls[0].path, '/api/organizations/org1/collections/c1/users');
   assert.equal(calls[0].method, 'PUT');
   assert.deepEqual(calls[0].body, {
-    grants: [
-      { orgUserId: 'ou1', readOnly: false, hidePasswords: false },
-      { orgUserId: 'ou2', readOnly: true, hidePasswords: true },
+    users: [
+      { id: 'ou1', readOnly: false, hidePasswords: false },
+      { id: 'ou2', readOnly: true, hidePasswords: true },
     ],
   });
 });
