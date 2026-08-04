@@ -59,7 +59,15 @@ export const DEMO_PROFILE: Profile = {
   role: 'admin',
   premium: true,
   object: 'profile',
+  organizations: [
+    { id: 'org-demo-acme', name: 'Acme Engineering', object: 'profileOrganization', enabled: true, status: 2, type: 0 },
+  ],
 };
+
+export const DEMO_ORG_COLLECTIONS: Array<{ id: string; name: string }> = [
+  { id: 'col-demo-infra', name: 'Infrastructure' },
+  { id: 'col-demo-shared', name: 'Shared logins' },
+];
 
 export const DEMO_SESSION: SessionState = {
   accessToken: 'demo-access-token',
@@ -113,6 +121,7 @@ export const DEMO_CIPHERS: Cipher[] = [
   {
     id: 'cipher-login-cloudflare',
     type: 1,
+    organizationId: 'org-demo-acme',
     folderId: 'folder-devops',
     favorite: true,
     reprompt: 1,
@@ -167,6 +176,7 @@ export const DEMO_CIPHERS: Cipher[] = [
   {
     id: 'cipher-login-microsoft',
     type: 1,
+    organizationId: 'org-demo-acme',
     folderId: 'folder-work',
     favorite: false,
     reprompt: 0,
@@ -349,6 +359,29 @@ export const DEMO_CIPHERS: Cipher[] = [
       decState: 'CA',
       decPostalCode: '94105',
       decCountry: 'United States',
+    },
+  },
+  {
+    id: 'cipher-apikey-stripe',
+    type: 9,
+    folderId: 'folder-devops',
+    favorite: false,
+    reprompt: 1,
+    name: 'Stripe API',
+    notes: 'Live-mode restricted key for the billing worker.',
+    decName: 'Stripe API',
+    decNotes: 'Live-mode restricted key for the billing worker.',
+    creationDate: '2026-04-22T11:00:00.000Z',
+    revisionDate: '2026-05-02T09:30:00.000Z',
+    apiKey: {
+      provider: 'Stripe',
+      keyId: 'rk_live_demo_51NWDemo',
+      key: 'sk_live_demo_9x8y7z6w5v4u3t2s1r0q',
+      expirationDate: '2026-12-31',
+      decProvider: 'Stripe',
+      decKeyId: 'rk_live_demo_51NWDemo',
+      decKey: 'sk_live_demo_9x8y7z6w5v4u3t2s1r0q',
+      decExpirationDate: '2026-12-31',
     },
   },
   {
@@ -1059,6 +1092,18 @@ function cipherFromDraft(draft: VaultDraft, current?: Cipher | null): Cipher {
     decFingerprint: draft.sshFingerprint || '',
   } : null;
 
+  next.apiKey = type === 9 ? {
+    ...(current?.apiKey || {}),
+    provider: draft.apiKeyProvider || '',
+    keyId: draft.apiKeyKeyId || '',
+    key: draft.apiKeySecret || '',
+    expirationDate: draft.apiKeyExpirationDate || '',
+    decProvider: draft.apiKeyProvider || '',
+    decKeyId: draft.apiKeyKeyId || '',
+    decKey: draft.apiKeySecret || '',
+    decExpirationDate: draft.apiKeyExpirationDate || '',
+  } : null;
+
   next.fields = draft.customFields.map((field) => ({
     type: field.type,
     name: field.label,
@@ -1427,6 +1472,14 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       await readonly();
       return { id: createDemoId('organization') };
     },
+    onShareVaultItem: async (cipher, orgId) => {
+      const revisionDate = new Date().toISOString();
+      state.setCiphers((prev) => prev.map((item) => (
+        item.id === cipher.id ? { ...item, organizationId: orgId, revisionDate } : item
+      )));
+      notify('success', t('txt_item_updated'));
+    },
+    onLoadShareCollections: async () => DEMO_ORG_COLLECTIONS.map((collection) => ({ ...collection })),
     onChangePassword: readonly,
     onSavePasswordHint: readonly,
     onEnableTotp: readonly,

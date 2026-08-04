@@ -847,3 +847,23 @@ details.nx-details > .details-body {
 @media (min-width: 1100px) {
   .nw-next .import-grid { grid-template-columns: minmax(0, 1fr) 320px; }
 }
+
+/* slice 9: move-to-folder picker inside the trapped dialog */
+.nw-next .nx-folderpick { display: flex; flex-direction: column; gap: 2px; max-height: 40vh; overflow-y: auto; }
+.nw-next .nx-folderpick .mrow {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-sp-2);
+  min-height: 32px;
+  padding: 0 var(--nx-sp-2);
+  border: 0;
+  border-radius: var(--nx-radius-md);
+  background: transparent;
+  color: var(--nx-ink);
+  font: inherit;
+  font-size: var(--nx-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.nw-next .nx-folderpick .mrow:hover { background: var(--nx-line-soft); }
+.nw-next .nx-folderpick .mrow.is-active { background: var(--nx-accent-soft); color: var(--nx-accent); }

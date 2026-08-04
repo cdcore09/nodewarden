@@ -58,7 +58,7 @@ const STRENGTH_LABELS = ['very weak', 'weak', 'fair', 'strong', 'very strong'];
 
 function draftValue(cipher: Cipher, key: string): string {
   const dec = 'dec' + key.charAt(0).toUpperCase() + key.slice(1);
-  const sections = [cipher.card, cipher.identity, (cipher as Record<string, unknown>).bankAccount, (cipher as Record<string, unknown>).driversLicense, (cipher as Record<string, unknown>).passport];
+  const sections = [cipher.card, cipher.identity, (cipher as Record<string, unknown>).bankAccount, (cipher as Record<string, unknown>).driversLicense, (cipher as Record<string, unknown>).passport, (cipher as Record<string, unknown>).apiKey];
   for (const section of sections) {
     if (section && typeof section === 'object') {
       const rec = section as Record<string, unknown>;
@@ -94,6 +94,11 @@ function displayFieldValue(cipher: Cipher, key: string): string {
   }
   if (key.startsWith('passport')) {
     const bare = key.slice(8);
+    return draftValue(cipher, bare.charAt(0).toLowerCase() + bare.slice(1));
+  }
+  if (key.startsWith('apiKey')) {
+    // draft keys are apiKey-prefixed; the cipher section stores the secret as `key`
+    const bare = key === 'apiKeySecret' ? 'key' : key.slice(6);
     return draftValue(cipher, bare.charAt(0).toLowerCase() + bare.slice(1));
   }
   return '';

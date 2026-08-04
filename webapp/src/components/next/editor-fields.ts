@@ -61,6 +61,12 @@ export const FIELD_GROUPS: Record<number, EditorField[]> = {
     { key: 'sshPrivateKey', label: 'Private key', mono: true, textarea: true },
     { key: 'sshFingerprint', label: 'Fingerprint', mono: true },
   ],
+  9: [
+    { key: 'apiKeyProvider', label: 'Provider' },
+    { key: 'apiKeyKeyId', label: 'Key ID', mono: true },
+    { key: 'apiKeySecret', label: 'Secret key', mono: true },
+    { key: 'apiKeyExpirationDate', label: 'Expiration date', mono: true },
+  ],
   8: [
     { key: 'passportSurname', label: 'Surname' },
     { key: 'passportGivenName', label: 'Given name' },

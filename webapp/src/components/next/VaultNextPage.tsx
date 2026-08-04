@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'wouter';
 import {
   Archive, ArchiveRestore, AtSign, Copy as CopyIcon, CopyPlus, ExternalLink, Folder as FolderIcon, HelpCircle, KeyRound, Layers, Lock, LogOut,
-  MoreHorizontal, PanelLeft, Pencil, Plus, RefreshCw, Search, Send as SendIcon, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Timer, Trash2, Undo2, Wand2,
+  MoreHorizontal, PanelLeft, Pencil, Plus, RefreshCw, Search, Send as SendIcon, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Timer, Trash2, Undo2, Users, Wand2,
 } from 'lucide-preact';
 import WebsiteIcon from '@/components/vault/WebsiteIcon';
 import NextAuditPage from './NextAuditPage';
@@ -48,7 +48,7 @@ import '../../styles/next/dashboard.css';
 
 const LIST_CAP = 200;
 const SORT_KEY = 'nodewarden.next.sort.v1';
-const ITEM_TYPES = [1, 3, 6, 4, 7, 8, 2, 5];
+const ITEM_TYPES = [1, 3, 9, 6, 4, 7, 8, 2, 5];
 
 // Fork-local strings (skin-feature precedent).
 const STR = {
@@ -57,6 +57,10 @@ const STR = {
   allItems: t('txt_all_items'),
   types: 'Types',
   folders: t('txt_folders'),
+  organizations: t('txt_org_page_title'),
+  manageOrgs: 'Manage…',
+  moveToFolder: 'Move to folder',
+  noFolder: 'No folder',
   sort: { name: 'Name', edited: 'Last edited', created: 'Created' } as Record<SortMode, string>,
   sortLabel: 'Sort',
   audit: 'Security audit',
@@ -191,6 +195,7 @@ function scopeTitle(scope: ScopeFilter): string {
     case 'duplicates': return t('txt_duplicates');
     case 'type': return cipherTypeLabel(scope.type);
     case 'folder': return scope.label;
+    case 'org': return scope.label;
   }
 }
 
@@ -242,6 +247,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [moveEntryId, setMoveEntryId] = useState<string | null>(null);
   const [fixingId, setFixingId] = useState<string | null>(null);
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [railCollapsed, setRailCollapsed] = useState(() => {
@@ -320,6 +326,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const counts = useMemo(() => {
     const byType = new Map<number, number>();
     const byFolder = new Map<string, number>();
+    const byOrg = new Map<string, number>();
     let all = 0, favorites = 0, archived = 0, trashed = 0;
     for (const entry of entries) {
       if (entry.deleted) { trashed += 1; continue; }
@@ -328,8 +335,9 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       if (entry.favorite) favorites += 1;
       byType.set(entry.type, (byType.get(entry.type) || 0) + 1);
       if (entry.folderId) byFolder.set(entry.folderId, (byFolder.get(entry.folderId) || 0) + 1);
+      if (entry.organizationId) byOrg.set(entry.organizationId, (byOrg.get(entry.organizationId) || 0) + 1);
     }
-    return { all, favorites, archived, trashed, byType, byFolder };
+    return { all, favorites, archived, trashed, byType, byFolder, byOrg };
   }, [entries]);
 
   const openCipher = openId ? cipherById.get(openId) || null : null;
@@ -762,6 +770,24 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           </div>
         )}
 
+        {props.shareOrganizations.length > 0 && (
+          <div className="rail-group">
+            <div className="rail-head">{STR.organizations}</div>
+            {props.shareOrganizations.map((org) =>
+              railLink(
+                `o${org.id}`,
+                org.name,
+                <Users size={14} />,
+                { kind: 'org', orgId: org.id, label: org.name },
+                counts.byOrg.get(org.id)
+              )
+            )}
+            <button type="button" className="rail-link" onClick={() => navigate('/organizations')}>
+              <Settings size={14} />{STR.manageOrgs}
+            </button>
+          </div>
+        )}
+
         <div className="rail-group">
           {railLink('dups', t('txt_duplicates'), <CopyIcon size={14} />, { kind: 'duplicates' })}
           {railLink('archive', t('txt_archive'), <Archive size={14} />, { kind: 'archive' }, counts.archived)}
@@ -1117,6 +1143,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 <CopyPlus size={13} />Duplicate
               </button>
             )}
+            {!rowMenuEntry.deleted && props.folders.length > 0 && (
+              <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setMoveEntryId(rowMenuEntry.id); }}>
+                <FolderIcon size={13} />{STR.moveToFolder}
+              </button>
+            )}
             {props.shareOrganizations.length > 0 && !rowMenuEntry.organizationId && !rowMenuEntry.deleted && (
               <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setOpenId(rowMenuEntry.id); setShareOpen(true); }}>
                 <Share2 size={13} />{STR.share} <span className="k nx-kbd">⌘S</span>
@@ -1235,6 +1266,37 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 {confirm.confirmLabel}
               </button>
             </div>
+        </TrappedDialog>
+      )}
+
+      {moveEntryId && cipherById.get(moveEntryId) && (
+        <TrappedDialog label={STR.moveToFolder} onClose={() => setMoveEntryId(null)}>
+          <h3>{STR.moveToFolder}</h3>
+          <div className="nx-folderpick" role="listbox" aria-label={STR.moveToFolder}>
+            {[{ id: '', name: STR.noFolder }, ...props.folders.map((f) => ({ id: f.id, name: f.decName || f.name || '' }))].map((folder) => {
+              const cipher = cipherById.get(moveEntryId)!;
+              const current = (cipher.folderId || '') === folder.id;
+              return (
+                <button
+                  key={folder.id || 'none'}
+                  type="button"
+                  role="option"
+                  aria-selected={current}
+                  className={`mrow${current ? ' is-active' : ''}`}
+                  onClick={() => {
+                    if (current) { setMoveEntryId(null); return; }
+                    const draft = draftFromCipher(cipher);
+                    draft.folderId = folder.id;
+                    setMoveEntryId(null);
+                    void props.onUpdate(cipher, draft)
+                      .catch((error) => props.onNotify('error', error instanceof Error ? error.message : String(error)));
+                  }}
+                >
+                  <FolderIcon size={13} />{folder.name}
+                </button>
+              );
+            })}
+          </div>
         </TrappedDialog>
       )}
 
