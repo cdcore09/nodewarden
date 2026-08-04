@@ -8,7 +8,8 @@ import type { SearchEntry } from '@/lib/next/search';
 import type { Cipher } from '@/lib/types';
 
 const STR = {
-  empty: 'No items with one-time codes yet. Add a TOTP secret to a login and it appears here.',
+  intro: 'Live two-factor codes for every login that has a one-time-code secret. Each code rolls over on its own timer — click a card to copy the current one.',
+  empty: 'No codes yet. Open a login, add its two-factor secret to the One-time code field, and the live code appears here.',
   copy: 'Copy code',
 };
 
@@ -42,6 +43,7 @@ export default function NextTotpPage(props: NextTotpPageProps) {
 
   return (
     <div className="nx-list" role="list">
+      <div className="nx-help totp-intro">{STR.intro}</div>
       {totpEntries.length === 0 && <div className="nx-empty">{STR.empty}</div>}
       <div className="totp-grid">
         {totpEntries.map((entry) => {

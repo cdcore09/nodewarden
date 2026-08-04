@@ -88,7 +88,9 @@ import {
   DEMO_FOLDERS,
   DEMO_SENDS,
   createDemoBackupSettings,
+  DEMO_ORG_KEYS,
   IS_DEMO_MODE,
+  createDemoOrgFetch,
   createDemoCompletedLogin,
   createDemoInitialBootstrapState,
   createDemoMainRoutesProps,
@@ -142,6 +144,7 @@ const APP_ROUTE_PATHS = [
   '/next/sends',
   '/next/settings',
   '/next/import',
+  '/next/orgs',
   ...IMPORT_ROUTE_PATHS,
 ] as const;
 const AUTH_ROUTES: ReadonlySet<string> = new Set(AUTH_ROUTE_PATHS);
@@ -300,6 +303,7 @@ export default function App() {
   // profile.organizations[]; a missing entry means that org's ciphers get
   // skipped (not decrypted with the wrong key) -- see vault-decrypt.ts.
   const [orgKeysCache, setOrgKeysCache] = useState<Record<string, Uint8Array>>({});
+  const demoOrgFetch = useMemo(() => (IS_DEMO_MODE ? createDemoOrgFetch() : null) as unknown as typeof authedFetch, []);
   const [decryptedCollections, setDecryptedCollections] = useState<Collection[]>([]);
   const [demoUsers, setDemoUsers] = useState<AdminUser[]>(() => DEMO_ADMIN_USERS.map((user) => ({ ...user })));
   const [demoInvites, setDemoInvites] = useState<AdminInvite[]>(() => DEMO_ADMIN_INVITES.map((invite) => ({ ...invite })));
@@ -2565,6 +2569,8 @@ export default function App() {
           onLogout={logoutNow}
           onNotify={pushToast}
           onImport={effectiveMainRoutesProps.onImport}
+          authedFetch={IS_DEMO_MODE ? demoOrgFetch : authedFetch}
+          orgKeys={IS_DEMO_MODE ? DEMO_ORG_KEYS : orgKeysCache}
         />
         {renderPassiveOverlays()}
       </>

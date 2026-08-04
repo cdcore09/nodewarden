@@ -24,6 +24,8 @@ const STR = {
   website: 'Website',
   notes: 'Notes',
   edit: 'Edit',
+  sharedTo: (org: string) => org ? `Shared to ${org}` : 'Shared to an organization',
+  sharedNoteHelp: 'This item is owned by the organization now — everyone with access to its collection sees it. Manage collections from the organization page.',
   share: 'Share',
   close: 'Close',
   customFields: 'Custom fields',
@@ -44,6 +46,7 @@ export type DetailCopyKind = 'password' | 'username' | 'totp' | 'field';
 interface DetailPanelProps {
   cipher: Cipher;
   folders: Folder[];
+  orgName?: string | null;
   canShare: boolean;
   onCopyValue: (value: string, label: string) => void;
   onDownloadAttachment: (attachment: CipherAttachment) => void;
@@ -366,6 +369,11 @@ export default function DetailPanel(props: DetailPanelProps) {
             <button type="button" className="nx-btn ghost" onClick={props.onShare}>
               {STR.share} <span className="nx-kbd">⌘S</span>
             </button>
+          )}
+          {!!props.cipher.organizationId && (
+            <span className="nx-help shared-note" title={STR.sharedNoteHelp}>
+              {STR.sharedTo(props.orgName || '')}
+            </span>
           )}
         </div>
       </div>

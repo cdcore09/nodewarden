@@ -48,7 +48,7 @@ export function listCommands(): NextCommand[] {
     { id: 'generator', label: 'Password generator', run: (ctx) => ctx.navigate('/next/generator') },
     { id: 'verification-codes', label: 'Verification codes', hint: 'all TOTP codes', run: (ctx) => ctx.navigate('/next/totp') },
     { id: 'sends', label: 'Sends', run: (ctx) => ctx.navigate('/next/sends') },
-    { id: 'organizations', label: 'Organizations', run: (ctx) => ctx.navigate('/organizations') },
+    { id: 'organizations', label: 'Organizations', hint: 'members · collections', run: (ctx) => ctx.navigate('/next/orgs') },
     { id: 'import', label: 'Import', hint: 'from another password manager', run: (ctx) => ctx.navigate('/next/import') },
     { id: 'backup', label: 'Backup center', run: (ctx) => ctx.navigate('/backup') },
     { id: 'settings', label: 'Settings', run: (ctx) => ctx.navigate('/next/settings') },

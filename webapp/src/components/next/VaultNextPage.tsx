@@ -17,7 +17,9 @@ import NextGeneratorPage from './NextGeneratorPage';
 import NextSendsPage from './NextSendsPage';
 import NextSettingsPage from './NextSettingsPage';
 import NextImportPage from './NextImportPage';
+import NextOrgsPage from './NextOrgsPage';
 import type { CiphersImportPayload } from '@/lib/api/vault';
+import type { AuthedFetch } from '@/lib/api/shared';
 import type { ImportResultSummary } from '@/components/ImportPage';
 import ShortcutSheet from './ShortcutSheet';
 import { useDialogFocus } from './useDialogFocus';
@@ -59,6 +61,9 @@ const STR = {
   folders: t('txt_folders'),
   organizations: t('txt_org_page_title'),
   manageOrgs: 'Manage…',
+  storage: 'Storage',
+  sharedStatic: (org: string) => (org ? `Shared to ${org}` : 'Shared to an organization'),
+  sharedStaticHelp: 'Owned by the organization — sharing moved it there and can’t be repeated from here.',
   moveToFolder: 'Move to folder',
   noFolder: 'No folder',
   sort: { name: 'Name', edited: 'Last edited', created: 'Created' } as Record<SortMode, string>,
@@ -129,6 +134,8 @@ interface VaultNextPageProps {
     payload: CiphersImportPayload,
     options: { folderMode: 'original' | 'none' | 'target'; targetFolderId: string | null }
   ) => Promise<ImportResultSummary>;
+  authedFetch: AuthedFetch;
+  orgKeys: Record<string, Uint8Array>;
 }
 
 type CopyKind = PaletteCopyKind;
@@ -199,7 +206,7 @@ function scopeTitle(scope: ScopeFilter): string {
   }
 }
 
-type NextPage = 'vault' | 'audit' | 'totp' | 'generator' | 'sends' | 'settings' | 'import';
+type NextPage = 'vault' | 'audit' | 'totp' | 'generator' | 'sends' | 'settings' | 'import' | 'orgs';
 
 const PAGE_TITLES: Record<NextPage, string> = {
   vault: '',
@@ -209,6 +216,7 @@ const PAGE_TITLES: Record<NextPage, string> = {
   sends: 'Sends',
   settings: 'Settings',
   import: 'Import',
+  orgs: t('txt_org_page_title'),
 };
 
 function pageFromLocation(location: string): NextPage {
@@ -218,6 +226,7 @@ function pageFromLocation(location: string): NextPage {
   if (location === '/next/sends') return 'sends';
   if (location === '/next/settings') return 'settings';
   if (location === '/next/import') return 'import';
+  if (location === '/next/orgs' || location.startsWith('/next/orgs/')) return 'orgs';
   return 'vault';
 }
 
@@ -782,14 +791,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 counts.byOrg.get(org.id)
               )
             )}
-            <button type="button" className="rail-link" onClick={() => navigate('/organizations')}>
+            <button type="button" className={`rail-link${page === 'orgs' ? ' on' : ''}`} onClick={() => navigate('/next/orgs')}>
               <Settings size={14} />{STR.manageOrgs}
             </button>
           </div>
         )}
 
         <div className="rail-group">
-          {railLink('dups', t('txt_duplicates'), <CopyIcon size={14} />, { kind: 'duplicates' })}
+          <div className="rail-head">{STR.storage}</div>
           {railLink('archive', t('txt_archive'), <Archive size={14} />, { kind: 'archive' }, counts.archived)}
           {railLink('trash', t('txt_trash'), <Trash2 size={14} />, { kind: 'trash' }, counts.trashed)}
         </div>
@@ -805,6 +814,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           <button type="button" className={`rail-link${page === 'generator' ? ' on' : ''}`} onClick={() => navigate('/next/generator')}>
             <Wand2 size={14} />{PAGE_TITLES.generator}
           </button>
+          {railLink('dups', t('txt_duplicates'), <CopyIcon size={14} />, { kind: 'duplicates' })}
           <button type="button" className={`rail-link${page === 'audit' ? ' on' : ''}`} onClick={() => navigate('/next/audit')}>
             <ShieldCheck size={14} />{STR.audit}
           </button>
@@ -952,6 +962,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             onDelete={props.onDeleteSend}
             onCopyValue={(v, l) => void copyRawValue(v, l)}
             onConfirm={requestConfirm}
+            onNotify={props.onNotify}
+          />
+        )}
+        {page === 'orgs' && (
+          <NextOrgsPage
+            organizations={props.shareOrganizations}
+            authedFetch={props.authedFetch}
+            orgKeys={props.orgKeys}
+            orgItemCounts={counts.byOrg}
             onNotify={props.onNotify}
           />
         )}
@@ -1152,6 +1171,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setOpenId(rowMenuEntry.id); setShareOpen(true); }}>
                 <Share2 size={13} />{STR.share} <span className="k nx-kbd">⌘S</span>
               </button>
+            )}
+            {!!rowMenuEntry.organizationId && (
+              <div className="mrow is-static" role="presentation" title={STR.sharedStaticHelp}>
+                <Share2 size={13} />{STR.sharedStatic(props.shareOrganizations.find((o) => o.id === rowMenuEntry.organizationId)?.name || '')}
+              </div>
             )}
             <div className="msep" />
             {rowMenuEntry.deleted ? (
