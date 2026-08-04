@@ -92,7 +92,7 @@ export function summarizeImportResult(
     const cipherType = Number(raw?.type || 1) || 1;
     counter.set(cipherType, (counter.get(cipherType) || 0) + 1);
   }
-  const order = [1, 2, 3, 4, 5, 6, 7, 8];
+  const order = [1, 2, 3, 4, 5, 6, 7, 8, 9];
   const seen = new Set<number>(order);
   const typeCounts = order
     .filter((type) => (counter.get(type) || 0) > 0)
