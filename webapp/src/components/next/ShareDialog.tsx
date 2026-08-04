@@ -9,6 +9,10 @@ import { t } from '@/lib/i18n';
 
 const STR = {
   title: (name: string) => `Share “${name}”`,
+  manageTitle: (name: string) => `Sharing of “${name}”`,
+  manageConsequence: 'Members see this item if they have access to any checked collection. At least one is required — an item with no collection would be unreachable.',
+  save: 'Save',
+  oneOrg: 'An item belongs to one organization — its data is encrypted under that organization’s key. To share it with another organization too, duplicate the item and share the copy.',
   organization: 'Organization',
   collections: 'Collections',
   loading: 'Loading collections…',
@@ -27,10 +31,15 @@ interface ShareDialogProps {
   onConfirm: (orgId: string, collectionIds: string[]) => void;
   onCancel: () => void;
   submitting: boolean;
+  /** manage = the item already lives in an org: org locked, collections editable */
+  mode?: 'share' | 'manage';
+  initialOrgId?: string;
+  initialCollectionIds?: string[];
 }
 
 export default function ShareDialog(props: ShareDialogProps) {
-  const [orgId, setOrgId] = useState(props.organizations[0]?.id || '');
+  const manage = props.mode === 'manage';
+  const [orgId, setOrgId] = useState(props.initialOrgId || props.organizations[0]?.id || '');
   const [collections, setCollections] = useState<Array<{ id: string; name: string | null }> | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState('');
@@ -44,8 +53,12 @@ export default function ShareDialog(props: ShareDialogProps) {
     void props.loadCollections(orgId).then((rows) => {
       if (!alive) return;
       setCollections(rows);
-      // Single collection: pre-check it (stock parity).
-      setSelected(rows.length === 1 ? new Set([rows[0].id]) : new Set());
+      if (manage && props.initialCollectionIds) {
+        setSelected(new Set(props.initialCollectionIds.filter((id) => rows.some((r) => r.id === id))));
+      } else {
+        // Single collection: pre-check it (stock parity).
+        setSelected(rows.length === 1 ? new Set([rows[0].id]) : new Set());
+      }
     }).catch(() => {
       if (alive) setCollections([]);
     });
@@ -88,9 +101,9 @@ export default function ShareDialog(props: ShareDialogProps) {
           }
         }}
       >
-        <h3>{STR.title(props.cipherName)}</h3>
+        <h3>{manage ? STR.manageTitle(props.cipherName) : STR.title(props.cipherName)}</h3>
 
-        {props.organizations.length > 1 && (
+        {!manage && props.organizations.length > 1 && (
           <div className="nx-field">
             <span className="nx-overline">{STR.organization}</span>
             <div className="nx-option-list">
@@ -103,10 +116,10 @@ export default function ShareDialog(props: ShareDialogProps) {
             </div>
           </div>
         )}
-        {props.organizations.length === 1 && (
+        {(manage || props.organizations.length === 1) && (
           <div className="nx-field">
             <span className="nx-overline">{STR.organization}</span>
-            <div className="nx-help">{props.organizations[0].name}</div>
+            <div className="nx-help">{props.organizations.find((o) => o.id === orgId)?.name || props.organizations[0]?.name}</div>
           </div>
         )}
 
@@ -134,7 +147,8 @@ export default function ShareDialog(props: ShareDialogProps) {
               ))}
             </div>
           )}
-          <div className="nx-help">{STR.consequence}</div>
+          <div className="nx-help">{manage ? STR.manageConsequence : STR.consequence}</div>
+          {!manage && <div className="nx-help">{STR.oneOrg}</div>}
         </div>
 
         <div className="dfoot">
@@ -142,7 +156,7 @@ export default function ShareDialog(props: ShareDialogProps) {
             {t('txt_cancel')} <span className="nx-kbd">esc</span>
           </button>
           <button type="button" className="nx-btn" disabled={!canConfirm} onClick={() => props.onConfirm(orgId, [...selected])}>
-            {props.submitting ? STR.sharing : STR.share} <span className="nx-kbd on-fill">↵</span>
+            {props.submitting ? STR.sharing : manage ? STR.save : STR.share} <span className="nx-kbd on-fill">↵</span>
           </button>
         </div>
       </div>

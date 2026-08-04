@@ -95,6 +95,7 @@ export interface AppMainRoutesProps {
   onCreateVaultItem: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdateVaultItem: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onShareVaultItem: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
+  onUpdateVaultItemCollections: (cipher: Cipher, collectionIds: string[]) => Promise<void>;
   onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
   shareOrganizations: Array<{ id: string; name: string }>;
   onDeleteVaultItem: (cipher: Cipher) => Promise<void>;

@@ -24,8 +24,8 @@ const STR = {
   website: 'Website',
   notes: 'Notes',
   edit: 'Edit',
-  sharedTo: (org: string) => org ? `Shared to ${org}` : 'Shared to an organization',
-  sharedNoteHelp: 'This item is owned by the organization now — everyone with access to its collection sees it. Manage collections from the organization page.',
+  sharedTo: (org: string) => org ? `Sharing · ${org}` : 'Sharing…',
+  sharedNoteHelp: 'Owned by the organization. Change which collections carry this item — members see it if they can access any of them.',
   share: 'Share',
   close: 'Close',
   customFields: 'Custom fields',
@@ -53,6 +53,7 @@ interface DetailPanelProps {
   downloadingAttachmentKey?: string;
   onEdit: () => void;
   onShare: () => void;
+  onManageSharing: () => void;
   onMore: (x: number, y: number) => void;
   onClose: () => void;
 }
@@ -371,9 +372,9 @@ export default function DetailPanel(props: DetailPanelProps) {
             </button>
           )}
           {!!props.cipher.organizationId && (
-            <span className="nx-help shared-note" title={STR.sharedNoteHelp}>
-              {STR.sharedTo(props.orgName || '')}
-            </span>
+            <button type="button" className="nx-btn ghost" title={STR.sharedNoteHelp} onClick={props.onManageSharing}>
+              {STR.sharedTo(props.orgName || '')} <span className="nx-kbd">⌘S</span>
+            </button>
           )}
         </div>
       </div>

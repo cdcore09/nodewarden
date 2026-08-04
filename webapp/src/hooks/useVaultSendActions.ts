@@ -35,6 +35,7 @@ import {
   bulkUnarchiveCiphers,
   createCipher,
   createFolder,
+  updateCipherCollections,
   deleteCipher,
   deleteCipherAttachment,
   deleteFolder,
@@ -648,6 +649,19 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           } else {
             onNotify('error', error instanceof Error && error.message ? error.message : t('txt_org_share_failed'));
           }
+          throw error;
+        }
+      },
+
+      async updateVaultItemCollections(cipher: Cipher, collectionIds: string[]) {
+        if (!session) return;
+        try {
+          const updated = await updateCipherCollections(authedFetch, cipher.id, collectionIds);
+          await decryptAndPatch(updated);
+          void refreshVaultRevisionStamp();
+          onNotify('success', t('txt_item_updated'));
+        } catch (error) {
+          onNotify('error', error instanceof Error && error.message ? error.message : t('txt_org_share_failed'));
           throw error;
         }
       },
