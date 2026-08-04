@@ -1,11 +1,11 @@
 name: Upstream sync
 
 # Hourly watcher for shuaiplus/nodewarden. A cheap check job exits early when
-# there is nothing to sync or a previous sync is blocked on an open
-# `upstream-sync` issue; otherwise a Claude agent reviews the incoming
-# changes, screens them for security / supply-chain problems, and either
-# lands a merge commit on main or opens an assigned issue with a
-# remediation plan.
+# there is nothing to sync, a previous sync is blocked on an open
+# `upstream-sync` issue, or an open `upstream-sync` PR is awaiting review;
+# otherwise a Claude agent reviews the incoming changes, screens them for
+# security / supply-chain problems, and either opens a PR with the merge
+# for human review or opens an assigned issue with a remediation plan.
 
 on:
   schedule:
@@ -27,6 +27,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     outputs:
       sync_needed: ${{ steps.check.outputs.sync_needed }}
       behind: ${{ steps.check.outputs.behind }}
@@ -55,6 +56,12 @@ jobs:
             echo "sync_needed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          OPEN_SYNC_PRS="$(gh pr list --label upstream-sync --state open --json number --jq 'length')"
+          if [ "$OPEN_SYNC_PRS" -gt 0 ]; then
+            echo "::notice::$BEHIND upstream commit(s) pending, but an open upstream-sync PR awaits review. Merge or close it to resume."
+            echo "sync_needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "$BEHIND upstream commit(s) to review."
           echo "sync_needed=true" >> "$GITHUB_OUTPUT"
 
@@ -66,6 +73,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      pull-requests: write
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -73,11 +81,14 @@ jobs:
           fetch-depth: 0
 
       - name: Prepare git
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
         run: |
           git remote add upstream "$UPSTREAM_REPO"
           git fetch --quiet upstream main
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${SYNC_PAT}@github.com/${GITHUB_REPOSITORY}.git"
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
@@ -85,6 +96,8 @@ jobs:
 
       - name: Review and sync with Claude
         uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -141,18 +154,28 @@ jobs:
             (`git merge --abort`, or `git reset --hard origin/main` if
             already committed) and go to Phase 6.
 
-            ## Phase 5 — Land (only if Phases 2-4 were fully clean)
-            Commit the merge with a plain message in this exact shape and
-            nothing else appended (no attribution lines, no Co-Authored-By
-            trailers):
+            ## Phase 5 — Open a PR (only if Phases 2-4 were fully clean)
+            Never push to main. Create a branch named sync/upstream-<UTC date
+            YYYY-MM-DD> at the merge result and commit with a plain message in this
+            exact shape and nothing else appended (no attribution lines, no
+            Co-Authored-By trailers):
               chore(sync): merge upstream shuaiplus/nodewarden (<short-sha>, ${{ needs.check.outputs.behind }} commits)
-            Then `git push origin main`. Push only this one merge commit.
-            Never force-push. If the push is rejected, do not retry with
-            force — go to Phase 6.
+            If a branch with that name already exists on origin, go to Phase 6
+            instead. Push only that branch (never force), then open exactly one PR:
+              gh pr create --base main --head <branch> \
+                --title "chore(sync): upstream shuaiplus/nodewarden <short-sha> (${{ needs.check.outputs.behind }} commits)" \
+                --label upstream-sync --reviewer cdcore09 --body "<markdown>"
+            The PR body must contain: the list of upstream commits included, the
+            Phase 2 security/supply-chain screen results (state explicitly what was
+            checked and found clean), the Phase 4 verification results (each command
+            and outcome), and any trivial conflicts resolved with file references.
+            The open upstream-sync label is what pauses future runs until you review,
+            so apply it exactly. If pushing or PR creation fails, go to Phase 6.
 
             ## Phase 6 — Escalate instead of merging
             Reach this phase for any blocking security finding, MAJOR
-            conflict, verification failure, or unexpected git state. Make
+            conflict, verification failure, pre-existing sync branch, failed
+            push/PR creation, or unexpected git state. Make
             sure nothing is merged (working tree clean, main untouched),
             then create exactly one issue:
               gh issue create \
