@@ -618,8 +618,16 @@ details.nx-details > .details-body {
 }
 .nw-next .totp-card .card-code { display: flex; align-items: center; gap: var(--nx-sp-3); }
 .nw-next .totp-card .card-code .code { font-size: var(--nx-text-2xl); letter-spacing: 0.1em; color: var(--nx-ink); }
-.nw-next .totp-card .card-code .ring { width: 18px; height: 18px; }
-.nw-next .totp-card .card-code .secs { font-size: var(--nx-text-sm); color: var(--nx-ink-faint); margin-left: auto; }
+/* the ring and its seconds read as one countdown cluster on the right —
+   an auto margin between them strands the number across the card */
+.nw-next .totp-card .card-code .ring { width: 18px; height: 18px; margin-left: auto; }
+.nw-next .totp-card .card-code .secs {
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-faint);
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
 
 /* audit: stat tiles double as the finding filters */
 .nw-next .audit-stats {
