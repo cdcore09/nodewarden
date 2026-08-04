@@ -162,42 +162,45 @@ export default function NextSendsPage(props: NextSendsPageProps) {
       <div className="sends-list">
       {!props.loading && props.sends.length === 0 && !draft && <div className="nx-empty">{STR.empty}</div>}
 
+      <div className="sends-cards">
       {props.sends.map((send) => (
-        <div key={send.id} className="nx-row">
-          <span className="ico">{send.type === 2 ? <FileText size={14} /> : <Link2 size={14} />}</span>
-          <span className="main">
-            <span className="title">{send.decName || ''}</span>
-            <span className="sub ui-face">
-              {send.deletionDate ? STR.expires(new Date(send.deletionDate).toLocaleDateString()) : ''}
-              {typeof send.accessCount === 'number' ? ` · ${STR.views(send.accessCount)}` : ''}
-              {send.disabled ? ` · ${STR.disabled}` : ''}
+        <div key={send.id} className="send-card">
+          <div className="card-id">
+            <span className="ico">{send.type === 2 ? <FileText size={14} /> : <Link2 size={14} />}</span>
+            <span className="who">
+              <span className="title">{send.decName || ''}</span>
+              <span className="sub nx-data">
+                {send.deletionDate ? STR.expires(new Date(send.deletionDate).toLocaleDateString()) : ''}
+                {typeof send.accessCount === 'number' ? ` · ${STR.views(send.accessCount)}` : ''}
+              </span>
             </span>
-          </span>
-          <span className="meta">
-            <span className="rowacts" style={{ display: 'inline-flex' }}>
-              <button type="button" className="nx-iconbtn" title={STR.copyLink} onClick={() => props.onCopyValue(sendUrl(send), 'Link')}>
-                <Link2 size={13} />
-              </button>
-              <button type="button" className="nx-iconbtn" title={STR.edit} onClick={() => startEdit(send)}>
-                <Pencil size={13} />
-              </button>
-              <button
-                type="button"
-                className="nx-iconbtn"
-                title={STR.del}
-                onClick={() => props.onConfirm(
-                  STR.delTitle(send.decName || ''),
-                  STR.delMessage,
-                  STR.del,
-                  () => props.onDelete(send)
-                )}
-              >
-                <Trash2 size={13} />
-              </button>
-            </span>
-          </span>
+            {send.disabled && <span className="nx-badge warn">{STR.disabled}</span>}
+          </div>
+          <div className="card-acts">
+            <button type="button" className="nx-btn ghost sm" onClick={() => props.onCopyValue(sendUrl(send), 'Link')}>
+              <Link2 size={12} /> {STR.copyLink}
+            </button>
+            <span className="spacer" />
+            <button type="button" className="nx-iconbtn" title={STR.edit} onClick={() => startEdit(send)}>
+              <Pencil size={13} />
+            </button>
+            <button
+              type="button"
+              className="nx-iconbtn"
+              title={STR.del}
+              onClick={() => props.onConfirm(
+                STR.delTitle(send.decName || ''),
+                STR.delMessage,
+                STR.del,
+                () => props.onDelete(send)
+              )}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       ))}
+      </div>
       </div>
       </div>
     </div>
