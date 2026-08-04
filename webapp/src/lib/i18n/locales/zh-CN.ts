@@ -1549,7 +1549,32 @@ Object.assign(zhCN, {
   "txt_org_accept_button": "Accept invitation",
   "txt_org_accepting": "Accepting…",
   "txt_org_accept_success": "Invitation accepted. The organization owner can now confirm your membership.",
-  "txt_org_accept_failed": "Failed to accept the invitation"
+  "txt_org_accept_failed": "Failed to accept the invitation",
+  "txt_org_collections_tab": "Collections",
+  "txt_org_new_collection_button": "New collection",
+  "txt_org_collections_loading": "Loading collections…",
+  "txt_org_collections_error": "Failed to load collections",
+  "txt_org_collections_empty": "No collections yet",
+  "txt_org_col_collection": "Collection",
+  "txt_org_collection_locked": "Locked (organization key unavailable)",
+  "txt_org_collection_create_title": "New collection",
+  "txt_org_collection_rename_title": "Rename collection",
+  "txt_org_collection_name_placeholder": "e.g. Streaming logins",
+  "txt_org_collection_saving": "Saving…",
+  "txt_org_collection_created": "Collection created",
+  "txt_org_collection_renamed": "Collection renamed",
+  "txt_org_collection_deleted": "Collection deleted",
+  "txt_org_collection_delete_title": "Delete collection",
+  "txt_org_collection_delete_message": "Delete \"{name}\"? Items shared into it will no longer be accessible through this collection.",
+  "txt_org_collection_action_failed": "Collection action failed",
+  "txt_org_rename_button": "Rename",
+  "txt_org_access_button": "Access",
+  "txt_org_access_title": "Access to \"{name}\"",
+  "txt_org_access_help": "Grant members access to this collection. Grants take effect once a member is confirmed.",
+  "txt_org_access_no_members": "No members to grant yet — invite someone first.",
+  "txt_org_access_read_only": "Read only",
+  "txt_org_access_hide_passwords": "Hide passwords",
+  "txt_org_access_updated": "Access updated"
 });
 
 export default zhCN;

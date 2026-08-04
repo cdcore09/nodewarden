@@ -2225,3 +2225,11 @@
     padding-top: 0;
   }
 }
+
+.org-access-row {
+  @apply mb-2;
+}
+
+.org-access-flags {
+  @apply mt-1.5 flex flex-wrap gap-4 pl-7;
+}
