@@ -209,10 +209,11 @@ export async function getOrgCollectionUsers(
     `/api/organizations/${encodeURIComponent(id)}/collections/${encodeURIComponent(cid)}/users`
   );
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to load collection access'));
-  const body = await parseJson<{ data?: unknown[] }>(resp);
-  const rows = Array.isArray(body?.data) ? body!.data : [];
+  // The server returns a bare array of { id (orgUserId), readOnly, hidePasswords }.
+  const body = await parseJson<unknown>(resp);
+  const rows = Array.isArray(body) ? body : [];
   return rows.map((r: any) => ({
-    orgUserId: String(r.orgUserId),
+    orgUserId: String(r.id),
     readOnly: !!r.readOnly,
     hidePasswords: !!r.hidePasswords,
   }));
@@ -232,7 +233,10 @@ export async function putOrgCollectionUsers(
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grants }),
+      // parseCollectionGrantsRequest expects { users: [{ id, readOnly, hidePasswords }] }.
+      body: JSON.stringify({
+        users: grants.map((g) => ({ id: g.orgUserId, readOnly: g.readOnly, hidePasswords: g.hidePasswords })),
+      }),
     }
   );
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to update collection access'));
