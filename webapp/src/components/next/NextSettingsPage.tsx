@@ -68,6 +68,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
   return (
     <div className="nx-list nx-settings">
       <div className="set-grid">
+      <div className="set-col">
       <div className="set-section set-card">
         <div className="nx-overline">{STR.appearance}</div>
         <Row label={STR.theme}>
@@ -133,6 +134,9 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
         </Row>
       </div>
 
+      </div>
+
+      <div className="set-col">
       <div className="set-section set-card">
         <div className="nx-overline">{STR.session}</div>
         <Row label={STR.lockTimeout}>
@@ -159,7 +163,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
         </Row>
       </div>
 
-      <div className="set-section set-card set-card-wide">
+      <div className="set-section set-card">
         <div className="nx-overline">{STR.security}</div>
         <div className="nx-help" style={{ marginBottom: 'var(--nx-sp-2)' }}>{STR.securityHelp}</div>
         <div className="set-links">
@@ -178,6 +182,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
             </button>
           ))}
         </div>
+      </div>
       </div>
       </div>
     </div>

@@ -164,7 +164,7 @@ export default function NextImportPage(props: NextImportPageProps) {
               </div>
             </div>
           ) : (
-            <>
+            <div className="import-card">
               <label className="nx-field">
                 <span className="nx-overline">{STR.source}</span>
                 <select
@@ -276,7 +276,7 @@ export default function NextImportPage(props: NextImportPageProps) {
                   {running ? STR.running : STR.run}
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
 
