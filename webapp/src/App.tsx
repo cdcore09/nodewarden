@@ -6,6 +6,7 @@ import AppGlobalOverlays, { type AppConfirmState } from '@/components/AppGlobalO
 import AuthRequestApprovalDialog from '@/components/AuthRequestApprovalDialog';
 import AuthViews from '@/components/AuthViews';
 import AuthViewsNext from '@/components/next/AuthViewsNext';
+import VaultNextPage from '@/components/next/VaultNextPage';
 import { readUiVersion } from '@/lib/ui-version';
 import NotFoundPage from '@/components/NotFoundPage';
 import PublicSendPage from '@/components/PublicSendPage';
@@ -133,6 +134,7 @@ const APP_ROUTE_PATHS = [
   SETTINGS_ACCOUNT_ROUTE,
   SETTINGS_DOMAIN_RULES_ROUTE,
   '/help',
+  '/next', // NodeWarden Next (issue #16): V2 retrieval surface
   ...IMPORT_ROUTE_PATHS,
 ] as const;
 const AUTH_ROUTES: ReadonlySet<string> = new Set(AUTH_ROUTE_PATHS);
@@ -227,6 +229,15 @@ export default function App() {
   const [authInlineError, setAuthInlineError] = useState('');
   const reportUnlockError = (message: string) =>
     readUiVersion() === 'v2' ? setAuthInlineError(message) : pushToast('error', message);
+  // NodeWarden Next (issue #16, slice 2): bare /vault lands on the V2 surface;
+  // ?cipher= and ?classic=1 bypass so item-open and the classic escape still
+  // reach the stock page.
+  useEffect(() => {
+    if (phase !== 'app' || readUiVersion() !== 'v2') return;
+    if (location === '/vault' && !/[?&](cipher|classic)=/.test(window.location.search)) {
+      navigate('/next', { replace: true });
+    }
+  }, [phase, location]);
   const [registerValues, setRegisterValues] = useState({
     name: '',
     email: '',
@@ -2506,6 +2517,24 @@ export default function App() {
           onCancelDisableTotp={() => {}}
           disableTotpSubmitting={false}
         />
+      </>
+    );
+  }
+
+  if (readUiVersion() === 'v2' && location === '/next') {
+    return (
+      <>
+        <VaultNextPage
+          ciphers={effectiveMainRoutesProps.decryptedCiphers}
+          folders={effectiveMainRoutesProps.decryptedFolders}
+          loading={effectiveMainRoutesProps.ciphersLoading}
+          emailForReprompt={profile?.email || session?.email || ''}
+          onVerifyMasterPassword={effectiveMainRoutesProps.onVerifyMasterPassword}
+          onLock={handleLock}
+          onLogout={logoutNow}
+          onNotify={pushToast}
+        />
+        {renderPassiveOverlays()}
       </>
     );
   }
