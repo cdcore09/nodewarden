@@ -5,9 +5,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
-import { TypeIcon, cipherTypeLabel } from '@/components/vault/vault-page-helpers';
+import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
+import { TypeIcon, cipherTypeLabel, parseFieldType, toBooleanFieldValue } from '@/components/vault/vault-page-helpers';
 import { FIELD_GROUPS } from './editor-fields';
-import type { Cipher, Folder } from '@/lib/types';
+import type { Cipher, CipherAttachment, Folder } from '@/lib/types';
 
 const STR = {
   reveal: 'Reveal',
@@ -23,6 +24,17 @@ const STR = {
   share: 'Share',
   openClassic: 'Open in classic',
   close: 'Close',
+  customFields: 'Custom fields',
+  attachments: 'Attachments',
+  download: 'Download',
+  breachCheck: 'check breach',
+  breachChecking: 'checking…',
+  breachSafe: 'not found in known breaches',
+  breachFound: (n: number) => `seen in breaches ${n.toLocaleString()} times — change it`,
+  breachError: 'breach check failed',
+  history: (n: number) => `Password history (${n})`,
+  yes: 'Yes',
+  no: 'No',
 };
 
 export type DetailCopyKind = 'password' | 'username' | 'totp' | 'field';
@@ -32,6 +44,8 @@ interface DetailPanelProps {
   folders: Folder[];
   canShare: boolean;
   onCopyValue: (value: string, label: string) => void;
+  onDownloadAttachment: (attachment: CipherAttachment) => void;
+  downloadingAttachmentKey?: string;
   onEdit: () => void;
   onShare: () => void;
   onOpenClassic: () => void;
@@ -84,6 +98,9 @@ function displayFieldValue(cipher: Cipher, key: string): string {
 export default function DetailPanel(props: DetailPanelProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [totpLive, setTotpLive] = useState<TotpCodeResult | null>(null);
+  const [breach, setBreach] = useState<'idle' | 'checking' | 'error' | PasswordBreachResult>('idle');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [hiddenFieldShown, setHiddenFieldShown] = useState<Record<number, boolean>>({});
   const login = props.cipher.type === 1 ? props.cipher.login : null;
   const folderName = props.cipher.folderId
     ? props.folders.find((f) => f.id === props.cipher.folderId)?.decName || ''
@@ -91,7 +108,21 @@ export default function DetailPanel(props: DetailPanelProps) {
 
   useEffect(() => {
     setShowPassword(false);
+    setBreach('idle');
+    setHistoryOpen(false);
+    setHiddenFieldShown({});
   }, [props.cipher.id]);
+
+  const runBreachCheck = async () => {
+    const password = login?.decPassword || '';
+    if (!password || breach === 'checking') return;
+    setBreach('checking');
+    try {
+      setBreach(await checkPasswordLeaked(password, fetch));
+    } catch {
+      setBreach('error');
+    }
+  };
 
   useEffect(() => {
     setTotpLive(null);
@@ -150,6 +181,36 @@ export default function DetailPanel(props: DetailPanelProps) {
                     <button type="button" className="nx-iconbtn" title={STR.copy} onClick={() => props.onCopyValue(login.decPassword || '', STR.password)}>⧉</button>
                   </span>
                 </span>
+                <span className="nx-help">
+                  {breach === 'idle' && (
+                    <button type="button" className="nx-alt-inline" style={{ color: 'var(--nx-accent)', background: 'none', border: 0, padding: 0, font: 'inherit', cursor: 'pointer' }} onClick={() => void runBreachCheck()}>
+                      {STR.breachCheck}
+                    </button>
+                  )}
+                  {breach === 'checking' && STR.breachChecking}
+                  {breach === 'error' && <span style={{ color: 'var(--nx-warn)' }}>{STR.breachError}</span>}
+                  {typeof breach === 'object' && (
+                    breach.count && breach.count > 0
+                      ? <span style={{ color: 'var(--nx-danger)' }}>{STR.breachFound(breach.count)}</span>
+                      : <span style={{ color: 'var(--nx-ok)' }}>{STR.breachSafe}</span>
+                  )}
+                </span>
+                {(props.cipher.passwordHistory || []).length > 0 && (
+                  <span className="nx-help">
+                    <button type="button" style={{ color: 'var(--nx-ink-muted)', background: 'none', border: 0, padding: 0, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}
+                      aria-expanded={historyOpen} onClick={() => setHistoryOpen((v) => !v)}>
+                      {STR.history((props.cipher.passwordHistory || []).length)}
+                    </button>
+                  </span>
+                )}
+                {historyOpen && (props.cipher.passwordHistory || []).map((entry, index) => (
+                  <span className="kval" key={index} style={{ fontSize: 'var(--nx-text-sm)', color: 'var(--nx-ink-muted)' }}>
+                    {entry.decPassword || '•••'}
+                    <span className="kacts">
+                      <button type="button" className="nx-iconbtn" title={STR.copy} onClick={() => props.onCopyValue(entry.decPassword || '', STR.password)}>⧉</button>
+                    </span>
+                  </span>
+                ))}
               </div>
             )}
             {totpLive && (
@@ -197,6 +258,61 @@ export default function DetailPanel(props: DetailPanelProps) {
             </div>
           );
         })}
+
+        {(props.cipher.fields || []).length > 0 && (
+          <div className="nx-kv">
+            <span className="nx-overline">{STR.customFields}</span>
+            {(props.cipher.fields || []).map((field, index) => {
+              const fieldType = parseFieldType(field.type);
+              const label = field.decName || field.name || '';
+              const value = field.decValue || '';
+              return (
+                <span className="kval" key={index} style={{ fontSize: 'var(--nx-text-sm)' }}>
+                  <span className="ui-face" style={{ color: 'var(--nx-ink-muted)', minWidth: 90 }}>{label}</span>
+                  {fieldType === 2
+                    ? (toBooleanFieldValue(value) ? STR.yes : STR.no)
+                    : fieldType === 1 && !hiddenFieldShown[index]
+                      ? <span className="mask">••••••</span>
+                      : value}
+                  <span className="kacts">
+                    {fieldType === 1 && (
+                      <button type="button" className="nx-iconbtn" title={hiddenFieldShown[index] ? STR.hide : STR.reveal}
+                        onClick={() => setHiddenFieldShown((prev) => ({ ...prev, [index]: !prev[index] }))}>
+                        {hiddenFieldShown[index] ? '◎' : '◉'}
+                      </button>
+                    )}
+                    {fieldType !== 2 && (
+                      <button type="button" className="nx-iconbtn" title={STR.copy} onClick={() => props.onCopyValue(value, label || STR.customFields)}>⧉</button>
+                    )}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {(props.cipher.attachments || []).length > 0 && (
+          <div className="nx-kv">
+            <span className="nx-overline">{STR.attachments}</span>
+            {(props.cipher.attachments || []).map((attachment) => (
+              <span className="kval ui-face" key={attachment.id || ''} style={{ fontSize: 'var(--nx-text-sm)' }}>
+                {attachment.decFileName || attachment.fileName || attachment.id}
+                {attachment.sizeName ? <span style={{ color: 'var(--nx-ink-faint)' }}> · {attachment.sizeName}</span> : null}
+                <span className="kacts">
+                  <button
+                    type="button"
+                    className="nx-iconbtn"
+                    title={STR.download}
+                    disabled={props.downloadingAttachmentKey === `${props.cipher.id}:${attachment.id || ''}`}
+                    onClick={() => props.onDownloadAttachment(attachment)}
+                  >
+                    {props.downloadingAttachmentKey === `${props.cipher.id}:${attachment.id || ''}` ? '…' : '↓'}
+                  </button>
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {props.cipher.decNotes && (
           <div className="nx-kv">

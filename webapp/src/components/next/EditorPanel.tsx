@@ -7,7 +7,7 @@ import { t } from '@/lib/i18n';
 import { estimateStrength } from '@/lib/password-generator';
 import { DEFAULT_RULES, clampRules, generateCandidate, type GeneratorRules } from './generator-rules';
 import { FIELD_GROUPS } from './editor-fields';
-import type { Folder, VaultDraft } from '@/lib/types';
+import type { CipherAttachment, CustomFieldType, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
 
 const STR = {
   newItem: 'New',
@@ -26,6 +26,18 @@ const STR = {
   notes: 'Notes',
   favorite: 'Favorite',
   reprompt: 'Ask for master password',
+  customFields: 'Custom fields',
+  addField: 'Add field',
+  removeField: 'Remove field',
+  fieldLabel: 'Label',
+  fieldValue: 'Value',
+  fieldTypes: { 0: 'Text', 1: 'Hidden', 2: 'Yes / no' } as Record<number, string>,
+  linkedField: 'Linked field (edit in classic)',
+  attachments: 'Attachments',
+  addAttachment: 'Add file',
+  markedForRemoval: 'will be removed on save',
+  undoRemove: 'Keep',
+  removeAttachment: 'Remove',
   save: 'Save',
   saving: 'Saving…',
   cancel: 'Cancel',
@@ -121,20 +133,37 @@ interface EditorPanelProps {
   draft: VaultDraft;
   isCreating: boolean;
   folders: Folder[];
+  attachments: CipherAttachment[];
   saving: boolean;
   dirty: boolean;
   onPatch: (patch: Partial<VaultDraft>) => void;
-  onSave: () => void;
+  onSave: (addFiles: File[], removeAttachmentIds: string[]) => void;
   onCancel: () => void;
 }
 
 export default function EditorPanel(props: EditorPanelProps) {
   const nameRef = useRef<HTMLInputElement>(null);
   const usernameRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [guard, setGuard] = useState(false);
+  const [addFiles, setAddFiles] = useState<File[]>([]);
+  const [removeIds, setRemoveIds] = useState<Set<string>>(new Set());
   const isLogin = props.draft.type === 1;
   const fields = FIELD_GROUPS[props.draft.type] || [];
+  const customFields = props.draft.customFields || [];
+  const attachmentsDirty = addFiles.length > 0 || removeIds.size > 0;
+  const dirty = props.dirty || attachmentsDirty;
+
+  const save = () => {
+    if (!props.saving) props.onSave(addFiles, [...removeIds]);
+  };
+
+  const patchCustomField = (index: number, patch: Partial<VaultDraftField>) => {
+    const next = customFields.slice();
+    next[index] = { ...next[index], ...patch };
+    props.onPatch({ customFields: next });
+  };
 
   useEffect(() => {
     // Create-from-query arrives with the name prefilled: focus username then.
@@ -143,7 +172,7 @@ export default function EditorPanel(props: EditorPanelProps) {
   }, []);
 
   const requestCancel = () => {
-    if (props.dirty) setGuard(true);
+    if (dirty) setGuard(true);
     else props.onCancel();
   };
 
@@ -152,7 +181,7 @@ export default function EditorPanel(props: EditorPanelProps) {
     if (meta && (event.key === 'Enter' || event.key.toLowerCase() === 's')) {
       event.preventDefault();
       event.stopPropagation();
-      if (!props.saving) props.onSave();
+      save();
     } else if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -272,14 +301,145 @@ export default function EditorPanel(props: EditorPanelProps) {
         {!isLogin && fields.map((field) => (
           <label className="nx-field" key={String(field.key)}>
             <span className="nx-overline">{field.label}</span>
-            <input
-              className={`nx-input${field.mono ? ' nx-data' : ''}`}
-              type="text"
-              value={(props.draft[field.key] as string) || ''}
-              onInput={(e) => props.onPatch({ [field.key]: (e.currentTarget as HTMLInputElement).value } as Partial<VaultDraft>)}
-            />
+            {field.textarea ? (
+              <textarea
+                className={`nx-input${field.mono ? ' nx-data' : ''}`}
+                value={(props.draft[field.key] as string) || ''}
+                onInput={(e) => props.onPatch({ [field.key]: (e.currentTarget as HTMLTextAreaElement).value } as Partial<VaultDraft>)}
+              />
+            ) : (
+              <input
+                className={`nx-input${field.mono ? ' nx-data' : ''}`}
+                type="text"
+                value={(props.draft[field.key] as string) || ''}
+                onInput={(e) => props.onPatch({ [field.key]: (e.currentTarget as HTMLInputElement).value } as Partial<VaultDraft>)}
+              />
+            )}
           </label>
         ))}
+
+        <div className="nx-field">
+          <span className="nx-overline">{STR.customFields}</span>
+          {customFields.map((field, index) => (
+            <div className="erow" key={index}>
+              {field.type === 3 ? (
+                <span className="nx-help" style={{ flex: 1 }}>{field.label || STR.linkedField} — {STR.linkedField}</span>
+              ) : (
+                <>
+                  <select
+                    className="nx-input"
+                    style={{ maxWidth: 110 }}
+                    value={String(field.type)}
+                    onInput={(e) => patchCustomField(index, { type: Number((e.currentTarget as HTMLSelectElement).value) as CustomFieldType })}
+                  >
+                    {[0, 1, 2].map((typeOption) => (
+                      <option key={typeOption} value={String(typeOption)}>{STR.fieldTypes[typeOption]}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="nx-input"
+                    type="text"
+                    placeholder={STR.fieldLabel}
+                    value={field.label}
+                    onInput={(e) => patchCustomField(index, { label: (e.currentTarget as HTMLInputElement).value })}
+                  />
+                  {field.type === 2 ? (
+                    <input
+                      type="checkbox"
+                      checked={field.value === 'true' || field.value === '1'}
+                      onInput={(e) => patchCustomField(index, { value: (e.currentTarget as HTMLInputElement).checked ? 'true' : 'false' })}
+                    />
+                  ) : (
+                    <input
+                      className="nx-input nx-data"
+                      type={field.type === 1 ? 'password' : 'text'}
+                      placeholder={STR.fieldValue}
+                      value={field.value}
+                      onInput={(e) => patchCustomField(index, { value: (e.currentTarget as HTMLInputElement).value })}
+                    />
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                className="nx-iconbtn"
+                title={STR.removeField}
+                onClick={() => props.onPatch({ customFields: customFields.filter((_, i) => i !== index) })}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div>
+            <button
+              type="button"
+              className="nx-btn ghost"
+              style={{ height: 28, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+              onClick={() => props.onPatch({ customFields: [...customFields, { type: 0, label: '', value: '' }] })}
+            >
+              {STR.addField}
+            </button>
+          </div>
+        </div>
+
+        <div className="nx-field">
+          <span className="nx-overline">{STR.attachments}</span>
+          {props.attachments.map((attachment) => {
+            const id = attachment.id || '';
+            const removed = removeIds.has(id);
+            return (
+              <div className="erow" key={id} style={removed ? { opacity: 0.5 } : undefined}>
+                <span className="nx-help" style={{ flex: 1, textDecoration: removed ? 'line-through' : 'none' }}>
+                  {attachment.decFileName || attachment.fileName || id} {attachment.sizeName ? `· ${attachment.sizeName}` : ''}
+                  {removed ? ` — ${STR.markedForRemoval}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="nx-iconbtn"
+                  title={removed ? STR.undoRemove : STR.removeAttachment}
+                  onClick={() => setRemoveIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  })}
+                >
+                  {removed ? '↺' : '✕'}
+                </button>
+              </div>
+            );
+          })}
+          {addFiles.map((file, index) => (
+            <div className="erow" key={`${file.name}-${index}`}>
+              <span className="nx-help" style={{ flex: 1 }}>{file.name} · {Math.max(1, Math.round(file.size / 1024))} KB</span>
+              <button type="button" className="nx-iconbtn" title={STR.removeAttachment}
+                onClick={() => setAddFiles((prev) => prev.filter((_, i) => i !== index))}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <div>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from((e.currentTarget as HTMLInputElement).files || []);
+                if (files.length) setAddFiles((prev) => [...prev, ...files]);
+                (e.currentTarget as HTMLInputElement).value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="nx-btn ghost"
+              style={{ height: 28, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+              onClick={() => fileRef.current?.click()}
+            >
+              {STR.addAttachment}
+            </button>
+          </div>
+        </div>
 
         <label className="nx-field">
           <span className="nx-overline">{STR.folder}</span>
@@ -338,7 +498,7 @@ export default function EditorPanel(props: EditorPanelProps) {
           </div>
         ) : (
           <>
-            <button type="button" className="nx-btn" disabled={props.saving || !props.draft.name.trim()} onClick={props.onSave}>
+            <button type="button" className="nx-btn" disabled={props.saving || !props.draft.name.trim()} onClick={save}>
               {props.saving ? STR.saving : STR.save} <span className="nx-kbd" style={{ borderColor: 'transparent', background: 'rgba(255,255,255,.2)', color: 'inherit' }}>⌘↵</span>
             </button>
             <button type="button" className="nx-btn ghost" disabled={props.saving} onClick={requestCancel}>

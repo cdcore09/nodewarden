@@ -41,7 +41,9 @@ export type ScopeFilter =
   | { kind: 'archive' }
   | { kind: 'trash' }
   | { kind: 'type'; type: number }
-  | { kind: 'folder'; folderId: string; label: string };
+  | { kind: 'folder'; folderId: string; label: string }
+  /** Normal-vault visibility; the duplicate grouping itself is applied by the caller. */
+  | { kind: 'duplicates' };
 
 function cardLast4(value: string | null | undefined): string {
   const digits = String(value || '').replace(/\D+/g, '');
@@ -102,6 +104,7 @@ function inScope(entry: SearchEntry, scope: ScopeFilter): boolean {
   if (entry.archived) return false;
   switch (scope.kind) {
     case 'all':
+    case 'duplicates':
       return true;
     case 'favorites':
       return entry.favorite;

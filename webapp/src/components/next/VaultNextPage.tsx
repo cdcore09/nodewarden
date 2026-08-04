@@ -7,9 +7,10 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'wouter';
 import {
-  Archive, ArchiveRestore, AtSign, ExternalLink, Folder as FolderIcon, KeyRound, Layers, Lock, LogOut,
-  MoreHorizontal, Pencil, Plus, Search, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Trash2, Undo2,
+  Archive, ArchiveRestore, AtSign, Copy as CopyIcon, ExternalLink, Folder as FolderIcon, KeyRound, Layers, Lock, LogOut,
+  MoreHorizontal, Pencil, Plus, RefreshCw, Search, Send, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Timer, Trash2, Undo2, Wand2,
 } from 'lucide-preact';
+import { generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { t } from '@/lib/i18n';
 import { calcTotpNow } from '@/lib/crypto';
 import {
@@ -18,7 +19,10 @@ import {
 } from '@/lib/next/search';
 import { copySensitive, CLIPBOARD_CLEAR_SECONDS, type ClipboardPort } from '@/lib/next/clipboard-clear';
 import { setUiVersion } from '@/lib/ui-version';
-import { TypeIcon, cipherTypeLabel, createEmptyDraft, draftFromCipher } from '@/components/vault/vault-page-helpers';
+import {
+  TypeIcon, buildCipherDuplicateSignatures, cipherTypeLabel, createEmptyDraft, draftFromCipher,
+  getDuplicateDetectionOptions, type DuplicateDetectionMode,
+} from '@/components/vault/vault-page-helpers';
 import CommandPalette, { type PaletteCopyKind } from './CommandPalette';
 import DetailPanel from './DetailPanel';
 import EditorPanel from './EditorPanel';
@@ -89,6 +93,9 @@ interface VaultNextPageProps {
   onUnarchive: (cipher: Cipher) => Promise<void>;
   onRestore: (ids: string[]) => Promise<void>;
   onBulkPermanentDelete: (ids: string[]) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onDownloadAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
+  downloadingAttachmentKey?: string;
   onLock: () => void;
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
@@ -155,6 +162,7 @@ function scopeTitle(scope: ScopeFilter): string {
     case 'favorites': return t('txt_favorites');
     case 'archive': return t('txt_archive');
     case 'trash': return t('txt_trash');
+    case 'duplicates': return t('txt_duplicates');
     case 'type': return cipherTypeLabel(scope.type);
     case 'folder': return scope.label;
   }
@@ -164,6 +172,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [, navigate] = useLocation();
   const [scope, setScope] = useState<ScopeFilter>({ kind: 'all' });
   const [sort, setSortState] = useState<SortMode>(readSort);
+  const [duplicateMode, setDuplicateMode] = useState<DuplicateDetectionMode>('exact');
+  const [syncing, setSyncing] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<VaultDraft | null>(null);
@@ -198,7 +208,28 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   );
 
   const scoped = useMemo(() => searchEntries(entries, '', scope, Number.MAX_SAFE_INTEGER), [entries, scope]);
-  const viewEntries = useMemo(() => sortEntries(scoped.results, sort).slice(0, LIST_CAP), [scoped.results, sort]);
+  const viewEntries = useMemo(() => {
+    if (scope.kind !== 'duplicates') return sortEntries(scoped.results, sort).slice(0, LIST_CAP);
+    // Duplicates: keep only entries whose signature collides; cluster groups together.
+    const signatureById = new Map<string, string[]>();
+    const counts = new Map<string, number>();
+    for (const entry of scoped.results) {
+      const cipher = cipherById.get(entry.id);
+      if (!cipher) continue;
+      const signatures = Array.from(new Set(buildCipherDuplicateSignatures(cipher, duplicateMode)));
+      signatureById.set(entry.id, signatures);
+      for (const signature of signatures) counts.set(signature, (counts.get(signature) || 0) + 1);
+    }
+    const duplicated = scoped.results.filter((entry) =>
+      (signatureById.get(entry.id) || []).some((signature) => (counts.get(signature) || 0) > 1)
+    );
+    const groupKey = (entry: SearchEntry) =>
+      (signatureById.get(entry.id) || []).find((signature) => (counts.get(signature) || 0) > 1) || '';
+    return duplicated
+      .sort((a, b) => groupKey(a).localeCompare(groupKey(b)) || a.name.localeCompare(b.name))
+      .slice(0, LIST_CAP);
+  }, [scoped.results, sort, scope.kind, duplicateMode, cipherById]);
+  const scopedTotal = scope.kind === 'duplicates' ? viewEntries.length : scoped.total;
 
   const counts = useMemo(() => {
     const byType = new Map<number, number>();
@@ -300,27 +331,58 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     setCreating(true);
     setOpenId(null);
     setPaletteOpen(false);
+    if (type === 5) {
+      // Seed a fresh Ed25519 key pair like the classic editor does.
+      void generateDefaultSshKeyMaterial()
+        .then((generated) => {
+          setDraft((prev) => {
+            if (!prev || prev.type !== 5 || prev.sshPrivateKey.trim() || prev.sshPublicKey.trim()) return prev;
+            return { ...prev, sshPrivateKey: generated.privateKey, sshPublicKey: generated.publicKey, sshFingerprint: generated.fingerprint };
+          });
+        })
+        .catch(() => { /* unsupported browser: user pastes keys manually */ });
+    }
+  };
+
+  const toggleFavorite = async (entry: SearchEntry) => {
+    const cipher = cipherById.get(entry.id);
+    if (!cipher) return;
+    setRowMenu(null);
+    try {
+      const flipped = draftFromCipher(cipher);
+      flipped.favorite = !flipped.favorite;
+      await props.onUpdate(cipher, flipped);
+    } catch (error) {
+      props.onNotify('error', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const syncVault = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try { await props.onRefresh(); } finally { setSyncing(false); }
   };
 
   const patchDraft = (patch: Partial<VaultDraft>) => {
     setDraft((current) => (current ? { ...current, ...patch } : current));
   };
 
-  const saveDraft = async () => {
+  const saveDraft = async (addFiles: File[], removeAttachmentIds: string[]) => {
     if (!draft || saving || !draft.name.trim()) return;
     const normalized: VaultDraft = {
       ...draft,
       loginUris: (draft.loginUris || []).filter((u) => u.uri.trim()),
+      customFields: (draft.customFields || []).filter((f) => f.label.trim() || f.value.trim() || f.type === 3),
     };
     setSaving(true);
     try {
       if (creating) {
-        await props.onCreate(normalized);
+        await props.onCreate(normalized, addFiles);
         setDraft(null);
         setCreating(false);
       } else {
         const cipher = draft.id ? cipherById.get(draft.id) : null;
-        if (cipher) await props.onUpdate(cipher, normalized);
+        if (cipher) await props.onUpdate(cipher, normalized, { addFiles, removeAttachmentIds });
         setDraft(null);
         setOpenId(draft.id || null);
       }
@@ -553,8 +615,25 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         )}
 
         <div className="rail-group">
+          {railLink('dups', t('txt_duplicates'), <CopyIcon size={14} />, { kind: 'duplicates' })}
           {railLink('archive', t('txt_archive'), <Archive size={14} />, { kind: 'archive' }, counts.archived)}
           {railLink('trash', t('txt_trash'), <Trash2 size={14} />, { kind: 'trash' }, counts.trashed)}
+        </div>
+
+        <div className="rail-group">
+          <div className="rail-head">Tools</div>
+          <button type="button" className="rail-link" onClick={() => navigate('/sends')}>
+            <Send size={14} />Sends
+          </button>
+          <button type="button" className="rail-link" onClick={() => navigate('/vault/totp')}>
+            <Timer size={14} />{t('txt_verification_code')}s
+          </button>
+          <button type="button" className="rail-link" onClick={() => navigate('/generator')}>
+            <Wand2 size={14} />Generator
+          </button>
+          <button type="button" className="rail-link" onClick={() => navigate('/import')}>
+            <ExternalLink size={14} />{t('txt_import')}
+          </button>
         </div>
 
         <div className="rail-foot">
@@ -581,7 +660,30 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       <main className="nx-main">
         <header className="nx-dashhead">
           <span className="scope-title">{scopeTitle(scope)}</span>
-          <span className="scope-count">{scoped.total}</span>
+          <span className="scope-count">{scopedTotal}</span>
+          {scope.kind === 'duplicates' && (
+            <select
+              className="nx-input"
+              style={{ width: 'auto', height: 34 }}
+              value={duplicateMode}
+              aria-label={t('txt_duplicates')}
+              onInput={(e) => setDuplicateMode((e.currentTarget as HTMLSelectElement).value as DuplicateDetectionMode)}
+            >
+              {getDuplicateDetectionOptions().map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            className="nx-iconbtn"
+            title={t('txt_sync_vault')}
+            style={{ width: 34, height: 34 }}
+            disabled={syncing}
+            onClick={() => void syncVault()}
+          >
+            <RefreshCw size={14} style={syncing ? { animation: 'nx-spin 1s linear infinite' } : undefined} />
+          </button>
           <select
             className="nx-input scope-select"
             style={{ width: 'auto', height: 34 }}
@@ -630,7 +732,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             </button>
             {newMenuOpen && (
               <div className="nx-menu" style={{ position: 'absolute', right: 0, top: 40 }} role="menu">
-                {ITEM_TYPES.filter((type) => type !== 5).map((type) => (
+                {ITEM_TYPES.map((type) => (
                   <button key={type} type="button" role="menuitem" className="mrow"
                     onClick={() => { setNewMenuOpen(false); startCreate(type); }}>
                     <TypeIcon type={type} />{cipherTypeLabel(type)}
@@ -720,8 +822,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             </div>
           ))}
 
-          {scoped.total > viewEntries.length && (
-            <div className="list-overflow">{STR.overflow(viewEntries.length, scoped.total)}</div>
+          {scopedTotal > viewEntries.length && (
+            <div className="list-overflow">{STR.overflow(viewEntries.length, scopedTotal)}</div>
           )}
         </div>
       </main>
@@ -731,10 +833,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           draft={draft}
           isCreating={creating}
           folders={props.folders}
+          attachments={(!creating && draft.id ? cipherById.get(draft.id)?.attachments : null) || []}
           saving={saving}
           dirty={JSON.stringify(draft) !== draftBase}
           onPatch={patchDraft}
-          onSave={() => void saveDraft()}
+          onSave={(addFiles, removeAttachmentIds) => void saveDraft(addFiles, removeAttachmentIds)}
           onCancel={closePanels}
         />
       ) : openCipher ? (
@@ -743,6 +846,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           folders={props.folders}
           canShare={props.shareOrganizations.length > 0}
           onCopyValue={(value, label) => void copyRawValue(value, label, openCipher.id)}
+          onDownloadAttachment={(attachment) => void props.onDownloadAttachment(openCipher, attachment.id || '')}
+          downloadingAttachmentKey={props.downloadingAttachmentKey}
           onEdit={() => startEdit(openCipher)}
           onShare={() => setShareOpen(true)}
           onOpenClassic={() => openClassic(openCipher.id)}
@@ -773,6 +878,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); editEntry(rowMenuEntry); }}>
               <Pencil size={13} />{STR.edit}
             </button>
+            {!rowMenuEntry.deleted && (
+              <button type="button" role="menuitem" className="mrow" onClick={() => void toggleFavorite(rowMenuEntry)}>
+                <Star size={13} />{rowMenuEntry.favorite ? 'Unfavorite' : 'Favorite'}
+              </button>
+            )}
             {props.shareOrganizations.length > 0 && !rowMenuEntry.organizationId && !rowMenuEntry.deleted && (
               <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setOpenId(rowMenuEntry.id); setShareOpen(true); }}>
                 <Share2 size={13} />{STR.share}

@@ -281,3 +281,5 @@
     max-height: 100dvh;
   }
 }
+
+@keyframes nx-spin { to { transform: rotate(360deg); } }
