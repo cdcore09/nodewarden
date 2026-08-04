@@ -22,18 +22,25 @@ CERT_DIR=""
 cleanup() { [ -n "$WRANGLER_PID" ] && kill "$WRANGLER_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
+# Defined early (not just before the CRUD steps below) so cert generation can
+# use it too: every step in this harness must fail loudly, never silently.
+fail() { echo "FAIL: $1"; exit 1; }
+
 CURL_CACERT=()
 if [ -z "$BASE" ]; then
   BASE="https://127.0.0.1:8787"
   grep -q JWT_SECRET .dev.vars 2>/dev/null || echo "JWT_SECRET=$(openssl rand -hex 32)" >> .dev.vars
 
   # Throwaway self-signed cert for 127.0.0.1, valid 2 days. Regenerated every
-  # run; never reused, never committed.
+  # run; never reused, never committed. Captured (not discarded) so a failure
+  # here -- missing openssl, a LibreSSL build rejecting -addext, a full/
+  # read-only TMPDIR -- prints a clear diagnostic instead of aborting silently
+  # under `set -e`.
   CERT_DIR="$(mktemp -d)"
-  openssl req -x509 -newkey rsa:2048 -nodes \
+  CERT_OUT="$(openssl req -x509 -newkey rsa:2048 -nodes \
     -keyout "$CERT_DIR/key.pem" -out "$CERT_DIR/cert.pem" \
-    -days 2 -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" \
-    > /dev/null 2>&1
+    -days 2 -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" 2>&1)" \
+    || fail "cert generation failed: $CERT_OUT"
 
   # A contract run always starts from an empty DB so the first-user
   # (invite-code-free) registration path is deterministic.
@@ -67,8 +74,6 @@ export BITWARDENCLI_APPDATA_DIR="$(mktemp -d)"
 EMAIL="compat-$(date +%s)@example.com"
 PASSWORD="CompatPassw0rd!$RANDOM"
 node scripts/client-compat/seed-account.mjs "$BASE" "$EMAIL" "$PASSWORD"
-
-fail() { echo "FAIL: $1"; exit 1; }
 
 "$BW" config server "$BASE"
 export BW_SESSION="$("$BW" login "$EMAIL" "$PASSWORD" --raw)"
