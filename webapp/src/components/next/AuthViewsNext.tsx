@@ -86,14 +86,22 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
   const showInviteCodeField =
     props.registrationInviteRequired !== false || !!props.registerValues.inviteCode.trim();
 
+  // Deterministic focus: Preact does not emulate autoFocus on elements created
+  // after initial page parse (React does), so mode transitions (register→login,
+  // app→locked) would land focus on <body>. Focus the mode's primary input on
+  // every mode change ourselves.
+  const primaryRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    primaryRef.current?.focus();
+  }, [props.mode, passkeyPasswordPending]);
+
   // Inline error (unlock): clear the field and refocus so retyping is immediate.
-  const unlockRef = useRef<HTMLInputElement>(null);
   const lastInlineError = useRef('');
   useEffect(() => {
     const error = props.inlineError || '';
     if (error && error !== lastInlineError.current && props.mode === 'locked') {
       props.onChangeUnlock('');
-      unlockRef.current?.focus();
+      primaryRef.current?.focus();
     }
     lastInlineError.current = error;
   }, [props.inlineError, props.mode]);
@@ -126,7 +134,7 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
           />
           <div className="nx-field">
             <input
-              ref={unlockRef}
+              ref={primaryRef}
               className="nx-input nx-password"
               type="password"
               autoFocus
@@ -196,6 +204,7 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
           <label className="nx-field">
             <span className="nx-overline">{t('txt_name')}</span>
             <input
+              ref={primaryRef}
               className="nx-input"
               type="text"
               autoFocus
@@ -321,6 +330,7 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
           </div>
           <div className="nx-field">
             <input
+              ref={primaryRef}
               className="nx-input nx-password"
               type="password"
               autoFocus
@@ -358,6 +368,7 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
         <label className="nx-field">
           <span className="nx-overline">{t('txt_email')}</span>
           <input
+            ref={emailPrefilled ? undefined : primaryRef}
             className="nx-input"
             type={props.relaxedLoginInput ? 'text' : 'email'}
             autoFocus={!emailPrefilled}
@@ -374,6 +385,7 @@ export default function AuthViewsNext(props: AuthViewsNextProps) {
         <label className="nx-field">
           <span className="nx-overline">{t('txt_master_password')}</span>
           <input
+            ref={emailPrefilled ? primaryRef : undefined}
             className="nx-input nx-password"
             type="password"
             autoFocus={emailPrefilled}
