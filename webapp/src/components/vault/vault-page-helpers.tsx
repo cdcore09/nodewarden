@@ -6,6 +6,7 @@ import {
   Globe,
   IdCard,
   KeyRound,
+  KeySquare,
   Landmark,
   ShieldUser,
   StickyNote,
@@ -17,7 +18,7 @@ import { firstCipherUri, hostFromUri, websiteIconUrl } from '@/lib/website-utils
 import { normalizeEquivalentDomain } from '@shared/domain-normalize';
 import WebsiteIcon from './WebsiteIcon';
 
-export type TypeFilter = 'login' | 'card' | 'identity' | 'note' | 'ssh' | 'bank' | 'license' | 'passport';
+export type TypeFilter = 'login' | 'card' | 'identity' | 'note' | 'ssh' | 'bank' | 'license' | 'passport' | 'apikey';
 export type VaultSortMode = 'edited' | 'created' | 'name';
 export type DuplicateDetectionMode = 'exact' | 'login-site' | 'login-credentials' | 'password';
 export type SidebarFilter =
@@ -127,6 +128,12 @@ export function passportListSubtitle(cipher: Cipher): string {
   return passportNumber || name || cipherTypeLabel(8);
 }
 
+export function apiKeyListSubtitle(cipher: Cipher): string {
+  const provider = valueOrFallback(cipher.apiKey?.decProvider ?? cipher.apiKey?.provider).trim();
+  const keyId = valueOrFallback(cipher.apiKey?.decKeyId ?? cipher.apiKey?.keyId).trim();
+  return provider || keyId || cipherTypeLabel(9);
+}
+
 export function CardBrandIcon({ brand }: { brand?: string | null }) {
   const display = displayCardBrand(brand);
   const key = display.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'generic';
@@ -153,6 +160,7 @@ export function getCreateTypeOptions(): TypeOption[] {
     { type: 8, label: t('txt_passport') },
     { type: 2, label: t('txt_note') },
     { type: 5, label: t('txt_ssh_key') },
+    { type: 9, label: t('txt_api_key') },
   ];
 }
 
@@ -219,6 +227,7 @@ export function CreateTypeIcon({ type }: { type: number }) {
   if (type === 6) return <Landmark size={15} />;
   if (type === 7) return <IdCard size={15} />;
   if (type === 8) return <BookUser size={15} />;
+  if (type === 9) return <KeySquare size={15} />;
   return <FileKey2 size={15} />;
 }
 
@@ -231,6 +240,7 @@ export function cipherTypeKey(type: number): TypeFilter {
   if (type === 6) return 'bank';
   if (type === 7) return 'license';
   if (type === 8) return 'passport';
+  if (type === 9) return 'apikey';
   return 'note';
 }
 
@@ -271,6 +281,7 @@ export function cipherTypeLabel(type: number): string {
   if (type === 6) return t('txt_bank_account');
   if (type === 7) return t('txt_drivers_license');
   if (type === 8) return t('txt_passport');
+  if (type === 9) return t('txt_api_key');
   return t('txt_item');
 }
 
@@ -283,6 +294,7 @@ export function TypeIcon({ type }: { type: number }) {
   if (type === 6) return <Landmark size={18} />;
   if (type === 7) return <IdCard size={18} />;
   if (type === 8) return <BookUser size={18} />;
+  if (type === 9) return <KeySquare size={18} />;
   return <FileKey2 size={18} />;
 }
 
