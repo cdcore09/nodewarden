@@ -624,7 +624,7 @@ export interface CipherResponse {
   bankAccount: CipherBankAccount | null;
   driversLicense: CipherDriversLicense | null;
   passport: CipherPassport | null;
-  apiKey?: CipherApiKey | null;
+  apiKey: CipherApiKey | null;
   fields: CipherField[] | null;
   passwordHistory: PasswordHistory[] | null;
   reprompt: number;

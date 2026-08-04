@@ -852,6 +852,10 @@ export function cipherToResponse(
     (passthrough as any).passport ?? null,
     PASSPORT_ENCRYPTED_KEYS
   );
+  const normalizedApiKey = sanitizeEncryptedObject(
+    (passthrough as any).apiKey ?? null,
+    ['provider', 'keyId', 'key', 'expirationDate']
+  );
   const responseType = Number(cipher.type) || 1;
   const normalizedSecureNote = responseType === 2
     ? normalizeCipherSecureNoteForCompatibility((passthrough as any).secureNote ?? null) ?? { type: 0 }
@@ -889,6 +893,7 @@ export function cipherToResponse(
     bankAccount: responseType === 6 ? normalizedBankAccount : null,
     driversLicense: responseType === 7 ? normalizedDriversLicense : null,
     passport: responseType === 8 ? normalizedPassport : null,
+    apiKey: responseType === 9 ? normalizedApiKey : null,
     key: responseCipherKey,
     data: typeof (passthrough as any).data === 'string' ? (passthrough as any).data : null,
     encryptedFor: (passthrough as any).encryptedFor ?? null,
