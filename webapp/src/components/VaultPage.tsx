@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import LoadingState from '@/components/LoadingState';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import VaultDialogs from '@/components/vault/VaultDialogs';
 import VaultDetailView from '@/components/vault/VaultDetailView';
 import VaultEditor from '@/components/vault/VaultEditor';
@@ -46,6 +47,9 @@ interface VaultPageProps {
   onRefresh: () => Promise<void>;
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
+  onShare: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
+  onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
+  shareOrganizations: Array<{ id: string; name: string }>;
   onDelete: (cipher: Cipher) => Promise<void>;
   onArchive: (cipher: Cipher) => Promise<void>;
   onUnarchive: (cipher: Cipher) => Promise<void>;
@@ -100,6 +104,11 @@ export default function VaultPage(props: VaultPageProps) {
   const [localError, setLocalError] = useState('');
   const [pendingArchive, setPendingArchive] = useState<Cipher | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Cipher | null>(null);
+  const [shareTarget, setShareTarget] = useState<Cipher | null>(null);
+  const [shareOrgId, setShareOrgId] = useState('');
+  const [shareCollections, setShareCollections] = useState<Array<{ id: string; name: string | null }> | null>(null);
+  const [shareSelectedIds, setShareSelectedIds] = useState<string[]>([]);
+  const [shareSubmitting, setShareSubmitting] = useState(false);
   const [bulkArchiveOpen, setBulkArchiveOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -871,6 +880,45 @@ const folderName = useCallback((id: string | null | undefined): string => {
     }
   }
 
+  async function loadShareCollectionsFor(orgId: string): Promise<void> {
+    setShareCollections(null);
+    setShareSelectedIds([]);
+    try {
+      const rows = await props.onLoadShareCollections(orgId);
+      setShareCollections(rows);
+      if (rows.length === 1) setShareSelectedIds([rows[0].id]);
+    } catch {
+      setShareCollections([]);
+    }
+  }
+
+  async function openShareDialog(cipher: Cipher): Promise<void> {
+    if (!props.shareOrganizations.length || cipher.organizationId) return;
+    const firstOrgId = props.shareOrganizations[0].id;
+    setShareTarget(cipher);
+    setShareOrgId(firstOrgId);
+    await loadShareCollectionsFor(firstOrgId);
+  }
+
+  function toggleShareCollection(id: string): void {
+    setShareSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function submitShare(): Promise<void> {
+    if (!shareTarget || !shareOrgId || !shareSelectedIds.length || shareSubmitting) return;
+    setShareSubmitting(true);
+    try {
+      await props.onShare(shareTarget, shareOrgId, shareSelectedIds);
+      setShareTarget(null);
+      setShareCollections(null);
+      setShareSelectedIds([]);
+    } catch {
+      // The action layer already shows the user-facing error toast.
+    } finally {
+      setShareSubmitting(false);
+    }
+  }
+
   async function handleRestoreSelected(cipher: Cipher): Promise<void> {
     setBusy(true);
     try {
@@ -1349,6 +1397,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
                 onRestore={(cipher) => void handleRestoreSelected(cipher)}
                 onArchive={(cipher) => setPendingArchive(cipher)}
                 onUnarchive={(cipher) => void handleUnarchiveSelected(cipher)}
+                onShare={props.shareOrganizations.length ? (cipher) => void openShareDialog(cipher) : undefined}
               />
             </div>
           )}
@@ -1369,6 +1418,63 @@ const folderName = useCallback((id: string | null | undefined): string => {
           )}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={!!shareTarget}
+        title={t('txt_org_share_title')}
+        message={t('txt_org_share_message')}
+        confirmText={shareSubmitting ? t('txt_org_sharing') : t('txt_org_share_button')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={shareSubmitting || !shareSelectedIds.length}
+        cancelDisabled={shareSubmitting}
+        onConfirm={() => void submitShare()}
+        onCancel={() => {
+          if (shareSubmitting) return;
+          setShareTarget(null);
+          setShareCollections(null);
+          setShareSelectedIds([]);
+        }}
+      >
+        {props.shareOrganizations.length > 1 && (
+          <label className="field">
+            <span>{t('txt_org_share_org_label')}</span>
+            <select
+              className="input"
+              value={shareOrgId}
+              disabled={shareSubmitting}
+              onInput={(e) => {
+                const next = (e.currentTarget as HTMLSelectElement).value;
+                setShareOrgId(next);
+                void loadShareCollectionsFor(next);
+              }}
+            >
+              {props.shareOrganizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="field">
+          <span>{t('txt_org_share_collections_label')}</span>
+          {shareCollections === null && <div className="field-help">{t('txt_org_collections_loading')}</div>}
+          {shareCollections !== null && !shareCollections.length && (
+            <div className="field-help">{t('txt_org_share_no_collections')}</div>
+          )}
+          {(shareCollections || []).map((collection) => (
+            <label key={collection.id} className="backup-option-label">
+              <input
+                type="checkbox"
+                checked={shareSelectedIds.includes(collection.id)}
+                disabled={shareSubmitting}
+                onInput={() => toggleShareCollection(collection.id)}
+              />
+              <span>{collection.name ?? t('txt_org_collection_locked')}</span>
+            </label>
+          ))}
+        </div>
+      </ConfirmDialog>
 
       <VaultDialogs
         busy={busy}

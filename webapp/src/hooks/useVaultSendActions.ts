@@ -44,6 +44,7 @@ import {
   getCipherById,
   importCiphers,
   permanentDeleteCipher,
+  shareCipher,
   type CiphersImportPayload,
   type ImportedCipherMapEntry,
   updateCipher,
@@ -52,6 +53,9 @@ import {
   uploadCipherAttachment,
   OrgKeyUnavailableError,
 } from '@/lib/api/vault';
+import { listOrgCollections } from '@/lib/api/organizations';
+import { decryptWithOrgKey } from '@/lib/org-crypto';
+import { draftFromCipher } from '@/components/vault/vault-page-helpers';
 import { deriveLoginHash, getPreloginKdfConfig, verifyMasterPassword } from '@/lib/api/auth';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { downloadBytesAsFile } from '@/lib/download';
@@ -626,6 +630,44 @@ export default function useVaultSendActions(options: UseVaultSendActionsOptions)
           setUploadingAttachmentName('');
           setAttachmentUploadPercent(null);
         }
+      },
+
+      // Share a personal cipher into an org: re-encrypt the decrypted draft
+      // under the org key (fail-closed) and assign it to the chosen collections.
+      async shareVaultItem(cipher: Cipher, orgId: string, collectionIds: string[]) {
+        if (!session) return;
+        try {
+          const draft = draftFromCipher(cipher);
+          const updated = await shareCipher(authedFetch, session, cipher, draft, orgId, collectionIds, orgKeys);
+          await decryptAndPatch(updated);
+          void refreshVaultRevisionStamp();
+          onNotify('success', t('txt_org_item_shared'));
+        } catch (error) {
+          if (error instanceof OrgKeyUnavailableError) {
+            onNotify('error', t('txt_org_key_unavailable'));
+          } else {
+            onNotify('error', error instanceof Error && error.message ? error.message : t('txt_org_share_failed'));
+          }
+          throw error;
+        }
+      },
+
+      async loadShareCollections(orgId: string): Promise<Array<{ id: string; name: string | null }>> {
+        const summaries = await listOrgCollections(authedFetch, orgId);
+        const orgKey = orgKeys?.[orgId];
+        const out: Array<{ id: string; name: string | null }> = [];
+        for (const summary of summaries) {
+          let name: string | null = null;
+          if (orgKey) {
+            try {
+              name = await decryptWithOrgKey(summary.name, orgKey);
+            } catch {
+              name = null;
+            }
+          }
+          out.push({ id: summary.id, name });
+        }
+        return out;
       },
 
       async downloadVaultAttachment(cipher: Cipher, attachmentId: string) {

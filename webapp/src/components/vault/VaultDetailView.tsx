@@ -1,6 +1,6 @@
 import { createPortal } from 'preact/compat';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink, Folder, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Trash2, X } from 'lucide-preact';
+import { AlertTriangle, Archive, Clipboard, Download, Eye, EyeOff, ExternalLink, Folder, Paperclip, Pencil, RefreshCw, RotateCcw, ShieldCheck, ShieldAlert, Trash2, Users, X } from 'lucide-preact';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
 import type { TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
@@ -41,6 +41,7 @@ interface VaultDetailViewProps {
   onToggleHiddenField: (index: number) => void;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => void;
   onStartEdit: () => void;
+  onShare?: (cipher: Cipher) => void;
   onDelete: (cipher: Cipher) => void;
   onRestore: (cipher: Cipher) => void | Promise<void>;
   onArchive: (cipher: Cipher) => void | Promise<void>;
@@ -566,6 +567,11 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                   ) : (
                     <button type="button" className="btn btn-secondary" onClick={() => void props.onArchive(props.selectedCipher)}>
                       <Archive size={14} className="btn-icon" /> {t('txt_archive')}
+                    </button>
+                  )}
+                  {!!props.onShare && !props.selectedCipher.organizationId && (
+                    <button type="button" className="btn btn-secondary" onClick={() => props.onShare!(props.selectedCipher)}>
+                      <Users size={14} className="btn-icon" /> {t('txt_org_share_button')}
                     </button>
                   )}
                 </>
