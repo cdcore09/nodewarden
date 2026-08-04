@@ -6,7 +6,10 @@ import { useEffect, useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
 import { checkPasswordLeaked, type PasswordBreachResult } from '@/lib/password-security';
+import { estimateStrength } from '@/lib/password-generator';
 import { TypeIcon, cipherTypeLabel, parseFieldType, toBooleanFieldValue } from '@/components/vault/vault-page-helpers';
+import WebsiteIcon from '@/components/vault/WebsiteIcon';
+import { MoreHorizontal } from 'lucide-preact';
 import { FIELD_GROUPS } from './editor-fields';
 import type { Cipher, CipherAttachment, Folder } from '@/lib/types';
 
@@ -22,7 +25,6 @@ const STR = {
   notes: 'Notes',
   edit: 'Edit',
   share: 'Share',
-  openClassic: 'Open in classic',
   close: 'Close',
   customFields: 'Custom fields',
   attachments: 'Attachments',
@@ -48,9 +50,11 @@ interface DetailPanelProps {
   downloadingAttachmentKey?: string;
   onEdit: () => void;
   onShare: () => void;
-  onOpenClassic: () => void;
+  onMore: (x: number, y: number) => void;
   onClose: () => void;
 }
+
+const STRENGTH_LABELS = ['very weak', 'weak', 'fair', 'strong', 'very strong'];
 
 function draftValue(cipher: Cipher, key: string): string {
   const dec = 'dec' + key.charAt(0).toUpperCase() + key.slice(1);
@@ -144,7 +148,11 @@ export default function DetailPanel(props: DetailPanelProps) {
   return (
     <aside className="nx-panel" aria-label={props.cipher.decName || ''}>
       <div className="phead">
-        <span className="ico"><TypeIcon type={props.cipher.type} /></span>
+        <span className="ico">
+          {props.cipher.type === 1
+            ? <WebsiteIcon cipher={props.cipher} fallback={<TypeIcon type={props.cipher.type} />} />
+            : <TypeIcon type={props.cipher.type} />}
+        </span>
         <div>
           <h2>{props.cipher.decName || ''}</h2>
           <div className="psub">
@@ -152,7 +160,18 @@ export default function DetailPanel(props: DetailPanelProps) {
             {props.cipher.organizationId && <span className="nx-badge org">org</span>}
           </div>
         </div>
-        <button type="button" className="nx-iconbtn pclose" aria-label={STR.close} onClick={props.onClose}>✕</button>
+        <button
+          type="button"
+          className="nx-iconbtn pclose"
+          aria-label="More actions"
+          onClick={(e) => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            props.onMore(rect.left - 220, rect.bottom + 4);
+          }}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+        <button type="button" className="nx-iconbtn" aria-label={STR.close} onClick={props.onClose}>✕</button>
       </div>
 
       <div>
@@ -182,6 +201,9 @@ export default function DetailPanel(props: DetailPanelProps) {
                   </span>
                 </span>
                 <span className="nx-help">
+                  <span className={`nx-badge ${estimateStrength('password', login.decPassword || '') >= 3 ? 'ok' : 'warn'}`} style={{ marginRight: 8 }}>
+                    {STRENGTH_LABELS[Math.max(0, Math.min(4, estimateStrength('password', login.decPassword || '')))]}
+                  </span>
                   {breach === 'idle' && (
                     <button type="button" className="nx-alt-inline" style={{ color: 'var(--nx-accent)', background: 'none', border: 0, padding: 0, font: 'inherit', cursor: 'pointer' }} onClick={() => void runBreachCheck()}>
                       {STR.breachCheck}
@@ -322,18 +344,25 @@ export default function DetailPanel(props: DetailPanelProps) {
         )}
       </div>
 
-      <div className="pactions">
-        <button type="button" className="nx-btn ghost" onClick={props.onEdit}>
-          {STR.edit} <span className="nx-kbd">⌘E</span>
-        </button>
-        {props.canShare && !props.cipher.organizationId && (
-          <button type="button" className="nx-btn ghost" onClick={props.onShare}>
-            {STR.share} <span className="nx-kbd">⌘S</span>
+      <div style={{ marginTop: 'auto', paddingTop: 'var(--nx-sp-4)' }}>
+        <div className="nx-help" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 'var(--nx-sp-3)' }}>
+          {props.cipher.revisionDate && (
+            <span>Last edited {new Date(props.cipher.revisionDate).toLocaleString()}</span>
+          )}
+          {props.cipher.creationDate && (
+            <span>Added {new Date(props.cipher.creationDate).toLocaleString()}</span>
+          )}
+        </div>
+        <div className="pactions" style={{ marginTop: 0, paddingTop: 0 }}>
+          <button type="button" className="nx-btn ghost" onClick={props.onEdit}>
+            {STR.edit} <span className="nx-kbd">⌘E</span>
           </button>
-        )}
-        <button type="button" className="nx-btn ghost" style={{ marginLeft: 'auto' }} onClick={props.onOpenClassic}>
-          {STR.openClassic}
-        </button>
+          {props.canShare && !props.cipher.organizationId && (
+            <button type="button" className="nx-btn ghost" onClick={props.onShare}>
+              {STR.share} <span className="nx-kbd">⌘S</span>
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

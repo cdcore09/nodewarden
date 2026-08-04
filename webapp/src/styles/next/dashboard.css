@@ -283,3 +283,70 @@
 }
 
 @keyframes nx-spin { to { transform: rotate(360deg); } }
+
+/* ── slice 5: shell pages, cheat sheet, collapsed rail, month groups ── */
+.nw-next.nx-dash.rail-collapsed { grid-template-columns: 1fr; }
+.nw-next.nx-dash.rail-collapsed.has-panel { grid-template-columns: 1fr 420px; }
+.nw-next.nx-dash.rail-collapsed .nx-rail { display: none; }
+
+.nx-list .list-month {
+  font-size: var(--nx-text-xs);
+  font-weight: var(--nx-weight-semibold);
+  letter-spacing: var(--nx-tracking-caps);
+  text-transform: uppercase;
+  color: var(--nx-ink-faint);
+  padding: var(--nx-sp-4) var(--nx-sp-3) var(--nx-sp-1);
+}
+
+.nx-dialog.nx-sheet { width: min(720px, calc(100vw - 32px)); }
+.nx-sheet .sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--nx-sp-5) var(--nx-sp-6);
+}
+.nx-sheet .sheet-group { display: flex; flex-direction: column; gap: var(--nx-sp-2); }
+.nx-sheet .sheet-row { display: flex; align-items: center; gap: var(--nx-sp-3); font-size: var(--nx-text-sm); }
+.nx-sheet .sheet-row .keys { display: inline-flex; gap: 4px; align-items: center; min-width: 110px; flex-shrink: 0; }
+.nx-sheet .sheet-row .sep { color: var(--nx-ink-faint); }
+.nx-sheet .sheet-row .lbl { color: var(--nx-ink-muted); }
+
+.nx-settings { display: flex; flex-direction: column; gap: var(--nx-sp-6); max-width: 640px; }
+.nx-settings .set-section { display: flex; flex-direction: column; gap: var(--nx-sp-2); }
+.nx-settings .set-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-sp-4);
+  padding: var(--nx-sp-2) 0;
+  border-bottom: 1px solid var(--nx-line-soft);
+}
+.nx-settings .set-row:last-child { border-bottom: 0; }
+.nx-settings .set-label { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: var(--nx-text-md); }
+.nx-settings .set-control .nx-input { width: auto; min-width: 220px; height: 34px; }
+.nx-settings .set-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--nx-sp-2) 0;
+  border: 0;
+  border-bottom: 1px solid var(--nx-line-soft);
+  background: transparent;
+  color: var(--nx-ink);
+  font: inherit;
+  font-size: var(--nx-text-md);
+  cursor: pointer;
+  text-align: left;
+}
+.nx-settings .set-link:hover { color: var(--nx-accent); }
+
+.nx-genpage { display: flex; flex-direction: column; gap: var(--nx-sp-4); max-width: 640px; }
+.nx-genpage .gen-candidate {
+  font-size: var(--nx-text-2xl);
+  line-height: 1.3;
+  word-break: break-all;
+  padding: var(--nx-sp-4);
+  border: 1px dashed var(--nx-accent-line);
+  border-radius: var(--nx-radius-lg);
+  background: var(--nx-inset);
+}
+.nx-menu .mrow .k { margin-left: auto; }

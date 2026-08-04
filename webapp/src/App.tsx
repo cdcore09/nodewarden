@@ -134,7 +134,13 @@ const APP_ROUTE_PATHS = [
   SETTINGS_ACCOUNT_ROUTE,
   SETTINGS_DOMAIN_RULES_ROUTE,
   '/help',
-  '/next', // NodeWarden Next (issue #16): V2 retrieval surface
+  // NodeWarden Next (issue #16): the V2 shell and its pages
+  '/next',
+  '/next/audit',
+  '/next/totp',
+  '/next/generator',
+  '/next/sends',
+  '/next/settings',
   ...IMPORT_ROUTE_PATHS,
 ] as const;
 const AUTH_ROUTES: ReadonlySet<string> = new Set(AUTH_ROUTE_PATHS);
@@ -2521,7 +2527,7 @@ export default function App() {
     );
   }
 
-  if (readUiVersion() === 'v2' && location === '/next') {
+  if (readUiVersion() === 'v2' && (location === '/next' || location.startsWith('/next/'))) {
     return (
       <>
         <VaultNextPage
@@ -2543,6 +2549,17 @@ export default function App() {
           onRefresh={effectiveMainRoutesProps.onRefreshVault}
           onDownloadAttachment={effectiveMainRoutesProps.onDownloadVaultAttachment}
           downloadingAttachmentKey={effectiveMainRoutesProps.downloadingAttachmentKey}
+          sends={effectiveMainRoutesProps.decryptedSends}
+          sendsLoading={effectiveMainRoutesProps.sendsLoading}
+          onCreateSend={effectiveMainRoutesProps.onCreateSend}
+          onUpdateSend={effectiveMainRoutesProps.onUpdateSend}
+          onDeleteSend={effectiveMainRoutesProps.onDeleteSend}
+          themePreference={effectiveMainRoutesProps.themePreference}
+          onThemePreferenceChange={effectiveMainRoutesProps.onThemePreferenceChange}
+          lockTimeoutMinutes={effectiveMainRoutesProps.lockTimeoutMinutes}
+          onLockTimeoutChange={effectiveMainRoutesProps.onLockTimeoutChange}
+          sessionTimeoutAction={effectiveMainRoutesProps.sessionTimeoutAction}
+          onSessionTimeoutActionChange={effectiveMainRoutesProps.onSessionTimeoutActionChange}
           onLock={handleLock}
           onLogout={logoutNow}
           onNotify={pushToast}

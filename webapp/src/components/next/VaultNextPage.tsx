@@ -7,9 +7,17 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'wouter';
 import {
-  Archive, ArchiveRestore, AtSign, Copy as CopyIcon, ExternalLink, Folder as FolderIcon, KeyRound, Layers, Lock, LogOut,
-  MoreHorizontal, Pencil, Plus, RefreshCw, Search, Send, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Timer, Trash2, Undo2, Wand2,
+  Archive, ArchiveRestore, AtSign, Copy as CopyIcon, CopyPlus, ExternalLink, Folder as FolderIcon, HelpCircle, KeyRound, Layers, Lock, LogOut,
+  MoreHorizontal, PanelLeft, Pencil, Plus, RefreshCw, Search, Send as SendIcon, Settings, Share2, ShieldCheck, Star, SquareArrowOutUpRight, Timer, Trash2, Undo2, Wand2,
 } from 'lucide-preact';
+import WebsiteIcon from '@/components/vault/WebsiteIcon';
+import NextAuditPage from './NextAuditPage';
+import NextTotpPage from './NextTotpPage';
+import NextGeneratorPage from './NextGeneratorPage';
+import NextSendsPage from './NextSendsPage';
+import NextSettingsPage from './NextSettingsPage';
+import ShortcutSheet from './ShortcutSheet';
+import type { Send, SendDraft } from '@/lib/types';
 import { generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { t } from '@/lib/i18n';
 import { calcTotpNow } from '@/lib/crypto';
@@ -66,7 +74,6 @@ const STR = {
   deleteForever: 'Delete forever',
   deleteForeverTitle: (name: string) => `Delete “${name}” forever?`,
   deleteForeverMessage: 'This permanently removes the item. There is no undo.',
-  openClassic: 'Open in classic',
   emptyVault: 'Your vault is empty.',
   createFirst: 'Create your first login',
   emptyScope: 'Nothing here.',
@@ -96,6 +103,17 @@ interface VaultNextPageProps {
   onRefresh: () => Promise<void>;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
   downloadingAttachmentKey?: string;
+  sends: Send[];
+  sendsLoading: boolean;
+  onCreateSend: (draft: SendDraft, autoCopyLink: boolean) => Promise<void>;
+  onUpdateSend: (send: Send, draft: SendDraft, autoCopyLink: boolean) => Promise<void>;
+  onDeleteSend: (send: Send) => Promise<void>;
+  themePreference: 'system' | 'light' | 'dark';
+  onThemePreferenceChange: (preference: 'system' | 'light' | 'dark') => void;
+  lockTimeoutMinutes: 0 | 1 | 5 | 15 | 30;
+  onLockTimeoutChange: (minutes: 0 | 1 | 5 | 15 | 30) => void;
+  sessionTimeoutAction: 'lock' | 'logout';
+  onSessionTimeoutActionChange: (action: 'lock' | 'logout') => void;
   onLock: () => void;
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
@@ -168,8 +186,29 @@ function scopeTitle(scope: ScopeFilter): string {
   }
 }
 
+type NextPage = 'vault' | 'audit' | 'totp' | 'generator' | 'sends' | 'settings';
+
+const PAGE_TITLES: Record<NextPage, string> = {
+  vault: '',
+  audit: 'Security audit',
+  totp: 'Verification codes',
+  generator: 'Generator',
+  sends: 'Sends',
+  settings: 'Settings',
+};
+
+function pageFromLocation(location: string): NextPage {
+  if (location === '/next/audit') return 'audit';
+  if (location === '/next/totp') return 'totp';
+  if (location === '/next/generator') return 'generator';
+  if (location === '/next/sends') return 'sends';
+  if (location === '/next/settings') return 'settings';
+  return 'vault';
+}
+
 export default function VaultNextPage(props: VaultNextPageProps) {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const page = pageFromLocation(location);
   const [scope, setScope] = useState<ScopeFilter>({ kind: 'all' });
   const [sort, setSortState] = useState<SortMode>(readSort);
   const [duplicateMode, setDuplicateMode] = useState<DuplicateDetectionMode>('exact');
@@ -192,6 +231,18 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [fixingId, setFixingId] = useState<string | null>(null);
+  const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
+  const [railCollapsed, setRailCollapsed] = useState(() => {
+    try { return window.localStorage.getItem('nodewarden.next.rail.v1') === 'collapsed'; } catch { return false; }
+  });
+  const toggleRail = () => {
+    setRailCollapsed((prev) => {
+      try { window.localStorage.setItem('nodewarden.next.rail.v1', prev ? 'open' : 'collapsed'); } catch { /* session only */ }
+      return !prev;
+    });
+  };
   const unlockedIds = useRef<Set<string>>(new Set());
   const gateRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -384,7 +435,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         const cipher = draft.id ? cipherById.get(draft.id) : null;
         if (cipher) await props.onUpdate(cipher, normalized, { addFiles, removeAttachmentIds });
         setDraft(null);
-        setOpenId(draft.id || null);
+        // Audit fix-loop: a save that came from a finding resolves it in place.
+        if (fixingId && draft.id === fixingId) {
+          setFixedIds((prev) => new Set(prev).add(fixingId));
+          setFixingId(null);
+          setOpenId(null);
+        } else {
+          setOpenId(draft.id || null);
+        }
       }
     } catch (error) {
       props.onNotify('error', error instanceof Error ? error.message : String(error));
@@ -491,11 +549,32 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     }
   };
 
-  const openClassic = (id?: string) => {
-    navigate(id ? `/vault?cipher=${encodeURIComponent(id)}` : '/vault?classic=1');
+  const duplicateEntry = async (entry: SearchEntry) => {
+    const cipher = cipherById.get(entry.id);
+    if (!cipher) return;
+    setRowMenu(null);
+    try {
+      const copy = draftFromCipher(cipher);
+      delete copy.id;
+      copy.name = `${copy.name} copy`;
+      await props.onCreate(copy);
+    } catch (error) {
+      props.onNotify('error', error instanceof Error ? error.message : String(error));
+    }
   };
 
-  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || sortMenuOpen || newMenuOpen;
+  const startFix = (cipherId: string) => {
+    const cipher = cipherById.get(cipherId);
+    if (!cipher) return;
+    setFixingId(cipherId);
+    startEdit(cipher);
+  };
+
+  const requestConfirm = (title: string, message: string, confirmLabel: string, run: () => Promise<void>) => {
+    setConfirm({ title, message, confirmLabel, run });
+  };
+
+  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || sortMenuOpen || newMenuOpen || sheetOpen;
 
   // Dashboard keyboard model.
   useEffect(() => {
@@ -541,6 +620,10 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       } else if (event.key === 'Escape') {
         if (panelOpen) { event.preventDefault(); closePanels(); }
         else if (selectedIndex >= 0) { event.preventDefault(); setSelectedIndex(-1); }
+      } else if (!targetIsInput && !meta && !event.altKey && (event.key === '?' || (event.key === '/' && event.shiftKey))) {
+        // "?" opens the shortcut cheat sheet — the discoverability layer.
+        event.preventDefault();
+        setSheetOpen(true);
       } else if (!targetIsInput && !meta && !event.altKey && event.key.length === 1) {
         // Type-anywhere: any printable character opens the palette pre-seeded.
         event.preventDefault();
@@ -560,14 +643,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const railLink = (
     key: string, label: string, icon: preact.ComponentChildren, target: ScopeFilter, count?: number
   ) => {
-    const on = JSON.stringify(scope) === JSON.stringify(target);
+    const on = page === 'vault' && JSON.stringify(scope) === JSON.stringify(target);
     return (
       <button
         key={key}
         type="button"
         className={`rail-link${on ? ' on' : ''}`}
         aria-current={on ? 'page' : undefined}
-        onClick={() => { setScope(target); closePanels(); }}
+        onClick={() => { setScope(target); closePanels(); if (page !== 'vault') navigate('/next'); }}
       >
         {icon}{label}
         {typeof count === 'number' && count > 0 && <span className="count">{count}</span>}
@@ -583,7 +666,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const rowMenuUri = rowMenuCipher?.login?.uris?.find((u) => u.decUri || u.uri);
 
   return (
-    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}`}>
+    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}`}>
       <nav className="nx-rail" aria-label="Vault">
         <div className="nx-wordmark"><span className="nx-mark" aria-hidden="true">N</span> NodeWarden</div>
 
@@ -622,14 +705,17 @@ export default function VaultNextPage(props: VaultNextPageProps) {
 
         <div className="rail-group">
           <div className="rail-head">Tools</div>
-          <button type="button" className="rail-link" onClick={() => navigate('/sends')}>
-            <Send size={14} />Sends
+          <button type="button" className={`rail-link${page === 'sends' ? ' on' : ''}`} onClick={() => navigate('/next/sends')}>
+            <SendIcon size={14} />Sends
           </button>
-          <button type="button" className="rail-link" onClick={() => navigate('/vault/totp')}>
-            <Timer size={14} />{t('txt_verification_code')}s
+          <button type="button" className={`rail-link${page === 'totp' ? ' on' : ''}`} onClick={() => navigate('/next/totp')}>
+            <Timer size={14} />{PAGE_TITLES.totp}
           </button>
-          <button type="button" className="rail-link" onClick={() => navigate('/generator')}>
-            <Wand2 size={14} />Generator
+          <button type="button" className={`rail-link${page === 'generator' ? ' on' : ''}`} onClick={() => navigate('/next/generator')}>
+            <Wand2 size={14} />{PAGE_TITLES.generator}
+          </button>
+          <button type="button" className={`rail-link${page === 'audit' ? ' on' : ''}`} onClick={() => navigate('/next/audit')}>
+            <ShieldCheck size={14} />{STR.audit}
           </button>
           <button type="button" className="rail-link" onClick={() => navigate('/import')}>
             <ExternalLink size={14} />{t('txt_import')}
@@ -638,14 +724,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
 
         <div className="rail-foot">
           <div className="rail-sep" />
-          <button type="button" className="rail-link" onClick={() => navigate('/security/password-health')}>
-            <ShieldCheck size={14} />{STR.audit}
-          </button>
-          <button type="button" className="rail-link" onClick={() => navigate('/settings/account')}>
+          <button type="button" className={`rail-link${page === 'settings' ? ' on' : ''}`} onClick={() => navigate('/next/settings')}>
             <Settings size={14} />{t('txt_settings')}
           </button>
-          <button type="button" className="rail-link" onClick={commandContext.toClassic}>
-            <Undo2 size={14} />{STR.classic}
+          <button type="button" className="rail-link" onClick={() => setSheetOpen(true)}>
+            <HelpCircle size={14} />Shortcuts<span className="count"><span className="nx-kbd">?</span></span>
           </button>
           <div className="rail-sep" />
           <button type="button" className="rail-link" onClick={props.onLock}>
@@ -659,9 +742,19 @@ export default function VaultNextPage(props: VaultNextPageProps) {
 
       <main className="nx-main">
         <header className="nx-dashhead">
-          <span className="scope-title">{scopeTitle(scope)}</span>
-          <span className="scope-count">{scopedTotal}</span>
-          {scope.kind === 'duplicates' && (
+          <button
+            type="button"
+            className="nx-iconbtn"
+            title={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!railCollapsed}
+            style={{ width: 34, height: 34 }}
+            onClick={toggleRail}
+          >
+            <PanelLeft size={15} />
+          </button>
+          <span className="scope-title">{page === 'vault' ? scopeTitle(scope) : PAGE_TITLES[page]}</span>
+          {page === 'vault' && <span className="scope-count">{scopedTotal}</span>}
+          {page === 'vault' && scope.kind === 'duplicates' && (
             <select
               className="nx-input"
               style={{ width: 'auto', height: 34 }}
@@ -674,6 +767,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               ))}
             </select>
           )}
+          {page === 'vault' && (
           <button
             type="button"
             className="nx-iconbtn"
@@ -684,6 +778,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           >
             <RefreshCw size={14} style={syncing ? { animation: 'nx-spin 1s linear infinite' } : undefined} />
           </button>
+          )}
+          {page === 'vault' && (
           <select
             className="nx-input scope-select"
             style={{ width: 'auto', height: 34 }}
@@ -704,12 +800,17 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             <option value={JSON.stringify({ kind: 'archive' })}>{t('txt_archive')}</option>
             <option value={JSON.stringify({ kind: 'trash' })}>{t('txt_trash')}</option>
           </select>
+          )}
           <span className="grow" />
           <button type="button" className="nx-palette-trigger" onClick={() => { setPaletteSeed(''); setPaletteOpen(true); }}>
             <Search size={14} />
             <span className="grow">{STR.searchTrigger}</span>
             <span className="nx-kbd">⌘K</span>
           </button>
+          <button type="button" className="nx-iconbtn" title="Keyboard shortcuts — ?" style={{ width: 34, height: 34 }} onClick={() => setSheetOpen(true)}>
+            <HelpCircle size={15} />
+          </button>
+          {page === 'vault' && (<>
           <div style={{ position: 'relative' }}>
             <button type="button" className="hbtn" aria-expanded={sortMenuOpen} onClick={() => { setSortMenuOpen((v) => !v); setNewMenuOpen(false); }}>
               {STR.sortLabel}: {STR.sort[sort]}
@@ -738,15 +839,46 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                     <TypeIcon type={type} />{cipherTypeLabel(type)}
                   </button>
                 ))}
-                <div className="msep" />
-                <button type="button" role="menuitem" className="mrow" onClick={() => { setNewMenuOpen(false); openClassic(); }}>
-                  {STR.openClassic}
-                </button>
               </div>
             )}
           </div>
+          </>)}
         </header>
 
+        {page === 'audit' && (
+          <NextAuditPage ciphers={props.ciphers} entries={entries} onFix={startFix} fixedIds={fixedIds} />
+        )}
+        {page === 'totp' && (
+          <NextTotpPage entries={entries} cipherById={cipherById} onCopyValue={(v, l, id) => void copyRawValue(v, l, id)} copiedId={copiedId} />
+        )}
+        {page === 'generator' && (
+          <NextGeneratorPage onCopyValue={(v, l) => void copyRawValue(v, l)} />
+        )}
+        {page === 'sends' && (
+          <NextSendsPage
+            sends={props.sends}
+            loading={props.sendsLoading}
+            onCreate={props.onCreateSend}
+            onUpdate={props.onUpdateSend}
+            onDelete={props.onDeleteSend}
+            onCopyValue={(v, l) => void copyRawValue(v, l)}
+            onConfirm={requestConfirm}
+            onNotify={props.onNotify}
+          />
+        )}
+        {page === 'settings' && (
+          <NextSettingsPage
+            themePreference={props.themePreference}
+            onThemePreferenceChange={props.onThemePreferenceChange}
+            lockTimeoutMinutes={props.lockTimeoutMinutes}
+            onLockTimeoutChange={props.onLockTimeoutChange}
+            sessionTimeoutAction={props.sessionTimeoutAction}
+            onSessionTimeoutActionChange={props.onSessionTimeoutActionChange}
+            navigate={navigate}
+            onNotify={props.onNotify}
+          />
+        )}
+        {page === 'vault' && (
         <div className="nx-list" ref={listRef} role="listbox" aria-label={scopeTitle(scope)}>
           {props.loading && viewEntries.length === 0 && (
             <>
@@ -770,16 +902,29 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             <div className="nx-empty">{STR.emptyScope}</div>
           )}
 
-          {viewEntries.map((entry, index) => (
+          {viewEntries.map((entry, index) => {
+            const grouped = sort !== 'name' && scope.kind !== 'duplicates';
+            const dateOf = (e: SearchEntry) => (sort === 'created' ? e.creationDate : e.revisionDate);
+            const monthOf = (ms: number) => (ms ? new Date(ms).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'Undated');
+            const header = grouped && (index === 0 || monthOf(dateOf(viewEntries[index - 1])) !== monthOf(dateOf(entry)))
+              ? monthOf(dateOf(entry))
+              : null;
+            return (
+            <>
+            {header && <div className="list-month" key={`h-${header}-${index}`}>{header}</div>}
             <div
               key={entry.id}
               role="option"
               aria-selected={index === selectedIndex || entry.id === openId}
               className={`nx-row${index === selectedIndex || entry.id === openId ? ' is-active' : ''}${entry.id === copiedId ? ' is-copied' : ''}`}
               onClick={() => { setSelectedIndex(index); openEntry(entry); }}
-              onContextMenu={(e) => { e.preventDefault(); setRowMenu({ entryId: entry.id, x: e.clientX, y: e.clientY }); }}
+              onContextMenu={(e) => { e.preventDefault(); setSelectedIndex(index); setRowMenu({ entryId: entry.id, x: e.clientX, y: e.clientY }); }}
             >
-              <span className="ico"><TypeIcon type={entry.type} /></span>
+              <span className="ico">
+                {entry.type === 1
+                  ? <WebsiteIcon cipher={cipherById.get(entry.id)!} fallback={<TypeIcon type={entry.type} />} />
+                  : <TypeIcon type={entry.type} />}
+              </span>
               <span className="main">
                 <span className="title">{entry.name}</span>
                 <span className={`sub${entry.type === 1 ? '' : ' ui-face'}`}>{entry.sub}</span>
@@ -820,12 +965,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 </span>
               </span>
             </div>
-          ))}
+            </>
+            );
+          })}
 
           {scopedTotal > viewEntries.length && (
             <div className="list-overflow">{STR.overflow(viewEntries.length, scopedTotal)}</div>
           )}
         </div>
+        )}
       </main>
 
       {editorOpen && draft ? (
@@ -850,7 +998,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           downloadingAttachmentKey={props.downloadingAttachmentKey}
           onEdit={() => startEdit(openCipher)}
           onShare={() => setShareOpen(true)}
-          onOpenClassic={() => openClassic(openCipher.id)}
+          onMore={(x, y) => setRowMenu({ entryId: openCipher.id, x, y })}
           onClose={closePanels}
         />
       ) : null}
@@ -864,7 +1012,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             style={{ left: Math.min(rowMenu.x, window.innerWidth - 240), top: Math.min(rowMenu.y, window.innerHeight - 280), zIndex: 20 }}
           >
             <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); openEntry(rowMenuEntry); }}>
-              <SquareArrowOutUpRight size={13} />Open
+              <SquareArrowOutUpRight size={13} />Open <span className="k nx-kbd">↵</span>
             </button>
             {rowMenuEntry.type === 1 && rowMenuUri && (
               <button type="button" role="menuitem" className="mrow" onClick={() => {
@@ -876,16 +1024,21 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               </button>
             )}
             <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); editEntry(rowMenuEntry); }}>
-              <Pencil size={13} />{STR.edit}
+              <Pencil size={13} />{STR.edit} <span className="k nx-kbd">⌘E</span>
             </button>
             {!rowMenuEntry.deleted && (
               <button type="button" role="menuitem" className="mrow" onClick={() => void toggleFavorite(rowMenuEntry)}>
                 <Star size={13} />{rowMenuEntry.favorite ? 'Unfavorite' : 'Favorite'}
               </button>
             )}
+            {!rowMenuEntry.deleted && (
+              <button type="button" role="menuitem" className="mrow" onClick={() => void duplicateEntry(rowMenuEntry)}>
+                <CopyPlus size={13} />Duplicate
+              </button>
+            )}
             {props.shareOrganizations.length > 0 && !rowMenuEntry.organizationId && !rowMenuEntry.deleted && (
               <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setOpenId(rowMenuEntry.id); setShareOpen(true); }}>
-                <Share2 size={13} />{STR.share}
+                <Share2 size={13} />{STR.share} <span className="k nx-kbd">⌘S</span>
               </button>
             )}
             <div className="msep" />
@@ -917,10 +1070,6 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 </button>
               </>
             )}
-            <div className="msep" />
-            <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); openClassic(rowMenuEntry.id); }}>
-              {STR.openClassic}
-            </button>
           </div>
         </>
       )}
