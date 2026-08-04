@@ -42,6 +42,9 @@
   /* ── focus (the most important state in a keyboard-first product) ── */
   --nx-focus-ring: 0 0 0 2px var(--nx-surface), 0 0 0 4px var(--nx-accent);
 
+  /* overlay ink for chips sitting on accent-filled surfaces */
+  --nx-accent-overlay: color-mix(in srgb, var(--nx-accent-ink) 22%, transparent);
+
   /* ── type ── */
   --nx-font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     'Segoe UI Variable Text', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',

@@ -144,7 +144,7 @@ export default function NextSendsPage(props: NextSendsPageProps) {
           </div>
           <div style={{ display: 'flex', gap: 'var(--nx-sp-2)' }}>
             <button type="button" className="nx-btn" disabled={saving || !draft.name.trim()} onClick={() => void save()}>
-              {saving ? STR.saving : STR.save} <span className="nx-kbd" style={{ borderColor: 'transparent', background: 'rgba(255,255,255,.2)', color: 'inherit' }}>⌘↵</span>
+              {saving ? STR.saving : STR.save} <span className="nx-kbd on-fill">⌘↵</span>
             </button>
             <button type="button" className="nx-btn ghost" disabled={saving} onClick={() => { setDraft(null); setEditing(null); }}>
               {STR.cancel} <span className="nx-kbd">esc</span>

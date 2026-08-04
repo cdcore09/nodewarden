@@ -3,6 +3,7 @@
 // dashboard. Retrieval semantics live HERE: Enter copies a login's password;
 // the dashboard list underneath is a browsing context where Enter opens.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useDialogFocus } from './useDialogFocus';
 import { t } from '@/lib/i18n';
 import { searchEntries, type ScopeFilter, type SearchEntry } from '@/lib/next/search';
 import { listCommands, filterCommands, type NextCommand, type NextCommandContext } from './commands';
@@ -54,6 +55,8 @@ export default function CommandPalette(props: CommandPaletteProps) {
   const [query, setQuery] = useState(props.initialQuery || '');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const paletteRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(paletteRef, { initialFocus: false });
 
   const commandMode = query.startsWith('>');
   const itemSearch = useMemo(
@@ -120,7 +123,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
       className="nx-palette-scrim"
       onMouseDown={(e) => { if (e.target === e.currentTarget) props.onClose(); }}
     >
-      <div className="nx-palette" role="dialog" aria-modal="true" aria-label={STR.placeholder}>
+      <div ref={paletteRef} className="nx-palette" role="dialog" aria-modal="true" aria-label={STR.placeholder}>
         <div className="nx-search">
           {commandMode && <span className="nx-cmd-sigil" aria-hidden="true">&gt;</span>}
           <input

@@ -4,6 +4,7 @@
 // instead of silently wiping it. One visual language — no native popovers.
 // Design contract: mockups/05-share.html.
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { useDialogFocus } from './useDialogFocus';
 import { t } from '@/lib/i18n';
 
 const STR = {
@@ -35,9 +36,7 @@ export default function ShareDialog(props: ShareDialogProps) {
   const [notice, setNotice] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
+  useDialogFocus(dialogRef);
 
   useEffect(() => {
     let alive = true;
@@ -141,7 +140,7 @@ export default function ShareDialog(props: ShareDialogProps) {
             {t('txt_cancel')} <span className="nx-kbd">esc</span>
           </button>
           <button type="button" className="nx-btn" disabled={!canConfirm} onClick={() => props.onConfirm(orgId, [...selected])}>
-            {props.submitting ? STR.sharing : STR.share} <span className="nx-kbd" style={{ borderColor: 'transparent', background: 'rgba(255,255,255,.2)', color: 'inherit' }}>↵</span>
+            {props.submitting ? STR.sharing : STR.share} <span className="nx-kbd on-fill">↵</span>
           </button>
         </div>
       </div>

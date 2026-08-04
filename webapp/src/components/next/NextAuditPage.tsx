@@ -116,9 +116,8 @@ export default function NextAuditPage(props: NextAuditPageProps) {
             <button
               key={key}
               type="button"
-              className="nx-btn ghost"
+              className={`nx-btn ghost${filter === key ? ' tab-on' : ''}`}
               aria-pressed={filter === key}
-              style={filter === key ? { borderColor: 'var(--nx-accent-line)', color: 'var(--nx-accent)', background: 'var(--nx-accent-soft)' } : undefined}
               onClick={() => setFilter(key)}
             >
               {label} <span className="nx-kbd" style={{ minWidth: 22 }}>{count}</span>
@@ -158,8 +157,7 @@ export default function NextAuditPage(props: NextAuditPageProps) {
                   {item.weak && <span className="nx-badge warn">{STR.weak}</span>}
                   <button
                     type="button"
-                    className="nx-btn ghost"
-                    style={{ height: 26, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+                    className="nx-btn ghost sm"
                     onClick={() => props.onFix(item.cipherId)}
                   >
                     <KeyRound size={12} /> {STR.fix}

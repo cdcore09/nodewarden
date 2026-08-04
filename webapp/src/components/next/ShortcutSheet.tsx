@@ -1,7 +1,8 @@
 // NodeWarden Next (issue #16, slice 5): keyboard shortcut cheat sheet.
 // Opened with "?" anywhere in the Next shell, or the header help button —
 // the discoverability answer to "how was I supposed to know ⌘K?".
-import { useEffect, useRef } from 'preact/hooks';
+import { useRef } from 'preact/hooks';
+import { useDialogFocus } from './useDialogFocus';
 import { t } from '@/lib/i18n';
 
 const GROUPS: Array<{ title: string; rows: Array<[string, string]> }> = [
@@ -48,7 +49,7 @@ const GROUPS: Array<{ title: string; rows: Array<[string, string]> }> = [
 
 export default function ShortcutSheet(props: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  useDialogFocus(ref);
 
   return (
     <div className="nx-scrim" style={{ zIndex: 34 }} onClick={(e) => { if (e.target === e.currentTarget) props.onClose(); }}>
