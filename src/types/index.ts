@@ -133,6 +133,7 @@ export enum CipherType {
   BankAccount = 6,
   DriversLicense = 7,
   Passport = 8,
+  ApiKey = 9,
 }
 
 export interface CipherLoginUri {
@@ -178,6 +179,14 @@ export interface CipherBankAccount {
   swiftCode: string | null;
   iban: string | null;
   bankContactPhone: string | null;
+  [key: string]: any;
+}
+
+export interface CipherApiKey {
+  provider: string | null;
+  keyId: string | null;
+  key: string | null;
+  expirationDate: string | null;
   [key: string]: any;
 }
 
@@ -267,6 +276,7 @@ export interface Cipher {
   bankAccount?: CipherBankAccount | null;
   driversLicense?: CipherDriversLicense | null;
   passport?: CipherPassport | null;
+  apiKey?: CipherApiKey | null;
   fields: CipherField[] | null;
   passwordHistory: PasswordHistory[] | null;
   reprompt: number;
@@ -614,6 +624,7 @@ export interface CipherResponse {
   bankAccount: CipherBankAccount | null;
   driversLicense: CipherDriversLicense | null;
   passport: CipherPassport | null;
+  apiKey: CipherApiKey | null;
   fields: CipherField[] | null;
   passwordHistory: PasswordHistory[] | null;
   reprompt: number;

@@ -20,6 +20,7 @@ interface CiphersImportRequest {
     bankAccount?: any | null;
     driversLicense?: any | null;
     passport?: any | null;
+    apiKey?: any | null;
     key?: string | null;
     login?: {
       uris?: Array<{ uri: string | null; uriChecksum?: string | null; match?: number | null }> | null;
@@ -192,6 +193,7 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
     const bankAccount = readAliasedImportProp<any | null>(c, ['bankAccount', 'BankAccount']);
     const driversLicense = readAliasedImportProp<any | null>(c, ['driversLicense', 'DriversLicense']);
     const passport = readAliasedImportProp<any | null>(c, ['passport', 'Passport']);
+    const apiKey = readAliasedImportProp<any | null>(c, ['apiKey', 'ApiKey']);
     const fields = readAliasedImportProp<any[] | null>(c, ['fields', 'Fields']);
     const passwordHistory = readAliasedImportProp<any[] | null>(c, ['passwordHistory', 'PasswordHistory']);
     const key = readAliasedImportProp<string | null>(c, ['key', 'Key']);
@@ -267,6 +269,7 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
       bankAccount: bankAccount ?? null,
       driversLicense: driversLicense ?? null,
       passport: passport ?? null,
+      apiKey: apiKey ?? null,
       key: key ?? null,
       createdAt: now,
       updatedAt: now,

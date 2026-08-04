@@ -13,6 +13,7 @@ import {
   Globe,
   IdCard,
   KeyRound,
+  KeySquare,
   Landmark,
   LayoutGrid,
   Pencil,
@@ -142,6 +143,9 @@ export default function VaultSidebar(props: VaultSidebarProps) {
         </button>
         <button type="button" className={`tree-btn ${props.sidebarFilter.kind === 'type' && props.sidebarFilter.value === 'ssh' ? 'active' : ''}`} onClick={() => props.onChangeFilter({ kind: 'type', value: 'ssh' })}>
           <KeyRound size={14} className="tree-icon" /> <span className="tree-label">{t('txt_ssh_key')}</span>
+        </button>
+        <button type="button" className={`tree-btn ${props.sidebarFilter.kind === 'type' && props.sidebarFilter.value === 'apikey' ? 'active' : ''}`} onClick={() => props.onChangeFilter({ kind: 'type', value: 'apikey' })}>
+          <KeySquare size={14} className="tree-icon" /> <span className="tree-label">{t('txt_api_key')}</span>
         </button>
       </div>
 

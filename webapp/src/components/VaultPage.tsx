@@ -10,6 +10,7 @@ import {
   MOBILE_LAYOUT_QUERY,
   VAULT_LIST_OVERSCAN,
   VAULT_LIST_ROW_HEIGHT,
+  apiKeyListSubtitle,
   cardListSubtitle,
   FOLDER_SORT_STORAGE_KEY,
   VAULT_SORT_STORAGE_KEY,
@@ -331,6 +332,8 @@ export default function VaultPage(props: VaultPageProps) {
         cipher.passport?.decPassportNumber,
         cipher.passport?.decGivenName,
         cipher.passport?.decSurname,
+        cipher.apiKey?.decProvider,
+        cipher.apiKey?.decKeyId,
       ].filter(Boolean).join('\n');
       const cipherId = String(cipher.id || '').trim();
       meta.set(cipher.id, {
@@ -649,6 +652,7 @@ const folderName = useCallback((id: string | null | undefined): string => {
     if (Number(cipher.type || 1) === 6) return bankAccountListSubtitle(cipher);
     if (Number(cipher.type || 1) === 7) return driversLicenseListSubtitle(cipher);
     if (Number(cipher.type || 1) === 8) return passportListSubtitle(cipher);
+    if (Number(cipher.type || 1) === 9) return apiKeyListSubtitle(cipher);
     return cipherTypeLabel(Number(cipher.type || 1));
   }, [cipherMetaById]);
 

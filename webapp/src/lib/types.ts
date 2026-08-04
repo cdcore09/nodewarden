@@ -166,6 +166,18 @@ export interface CipherBankAccount {
   [key: string]: unknown;
 }
 
+export interface CipherApiKey {
+  provider?: string | null;
+  keyId?: string | null;
+  key?: string | null;
+  expirationDate?: string | null;
+  decProvider?: string;
+  decKeyId?: string;
+  decKey?: string;
+  decExpirationDate?: string;
+  [key: string]: unknown;
+}
+
 export interface CipherDriversLicense {
   firstName?: string | null;
   middleName?: string | null;
@@ -262,6 +274,7 @@ export interface Cipher {
   bankAccount?: CipherBankAccount | null;
   driversLicense?: CipherDriversLicense | null;
   passport?: CipherPassport | null;
+  apiKey?: CipherApiKey | null;
   secureNote?: { type?: number | null } | null;
   passwordHistory?: CipherPasswordHistoryEntry[] | null;
   fields?: CipherField[] | null;
@@ -409,6 +422,10 @@ export interface VaultDraft {
   passportIssuingAuthority: string;
   passportIssueDate: string;
   passportExpirationDate: string;
+  apiKeyProvider: string;
+  apiKeyKeyId: string;
+  apiKeySecret: string;
+  apiKeyExpirationDate: string;
   customFields: VaultDraftField[];
 }
 

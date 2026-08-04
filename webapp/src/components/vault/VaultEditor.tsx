@@ -648,6 +648,18 @@ export default function VaultEditor(props: VaultEditorProps) {
         </div>
       )}
 
+      {props.draft.type === 9 && (
+        <div className="card">
+          <h4>{t('txt_api_key_details')}</h4>
+          <div className="field-grid">
+            <label className="field"><span>{t('txt_provider')}</span><input className="input" value={props.draft.apiKeyProvider} onInput={(e) => props.onUpdateDraft({ apiKeyProvider: (e.currentTarget as HTMLInputElement).value })} /></label>
+            <label className="field"><span>{t('txt_key_id')}</span><input className="input" value={props.draft.apiKeyKeyId} onInput={(e) => props.onUpdateDraft({ apiKeyKeyId: (e.currentTarget as HTMLInputElement).value })} /></label>
+            <label className="field"><span>{t('txt_secret_key')}</span><input className="input" value={props.draft.apiKeySecret} onInput={(e) => props.onUpdateDraft({ apiKeySecret: (e.currentTarget as HTMLInputElement).value })} /></label>
+            <label className="field"><span>{t('txt_expiration_date')}</span><input className="input" placeholder="YYYY-MM-DD" value={props.draft.apiKeyExpirationDate} onInput={(e) => props.onUpdateDraft({ apiKeyExpirationDate: (e.currentTarget as HTMLInputElement).value })} /></label>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="section-head attachment-head">
           <h4>{t('txt_attachments')}</h4>
