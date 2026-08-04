@@ -10,11 +10,15 @@ import { buildSearchEntries, searchEntries, type ScopeFilter, type SearchEntry }
 import { copySensitive, CLIPBOARD_CLEAR_SECONDS, type ClipboardPort } from '@/lib/next/clipboard-clear';
 import { listCommands, filterCommands, type NextCommand } from './commands';
 import { setUiVersion } from '@/lib/ui-version';
-import { TypeIcon } from '@/components/vault/vault-page-helpers';
+import { TypeIcon, createEmptyDraft, draftFromCipher } from '@/components/vault/vault-page-helpers';
 import BrowsePanel from './BrowsePanel';
-import type { Cipher, Folder } from '@/lib/types';
+import DetailPanel from './DetailPanel';
+import EditorPanel from './EditorPanel';
+import ShareDialog from './ShareDialog';
+import type { Cipher, Folder, VaultDraft } from '@/lib/types';
 import '../../styles/next/tokens.css';
 import '../../styles/next/vault.css';
+import '../../styles/next/detail.css';
 
 const RESULT_LIMIT = 50;
 const HINT_SEEN_KEY = 'nodewarden.next.hint.v1';
@@ -54,6 +58,11 @@ interface VaultNextPageProps {
   loading: boolean;
   emailForReprompt: string;
   onVerifyMasterPassword: (email: string, password: string) => Promise<void>;
+  onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
+  onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
+  onShare: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
+  onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
+  shareOrganizations: Array<{ id: string; name: string }>;
   onLock: () => void;
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
@@ -63,10 +72,20 @@ type CopyKind = 'password' | 'username' | 'totp';
 
 interface GateState {
   entryId: string;
-  kind: CopyKind;
+  kind: CopyKind | 'open';
   error: string;
   submitting: boolean;
 }
+
+const CREATE_TYPES: Array<{ type: number; label: string }> = [
+  { type: 1, label: 'login' },
+  { type: 2, label: 'note' },
+  { type: 3, label: 'card' },
+  { type: 4, label: 'identity' },
+  { type: 6, label: 'bank account' },
+  { type: 7, label: 'driver license' },
+  { type: 8, label: 'passport' },
+];
 
 const clipboardPort: ClipboardPort = {
   write: (text) => navigator.clipboard.writeText(text),
@@ -100,6 +119,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [browseOpen, setBrowseOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [totpLive, setTotpLive] = useState<TotpCodeResult | null>(null);
+  // slice 3: detail / editor / share
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<VaultDraft | null>(null);
+  const [draftBase, setDraftBase] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareSubmitting, setShareSubmitting] = useState(false);
+  const unlockedIds = useRef<Set<string>>(new Set());
   const [hintSeen, setHintSeen] = useState(() => {
     try { return !!window.localStorage.getItem(HINT_SEEN_KEY); } catch { return true; }
   });
@@ -129,9 +157,10 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     [commandMode, query]
   );
 
-  const rowCount = commandMode ? commands.length : itemSearch.results.length;
+  const createMode = !commandMode && !!query.trim() && itemSearch.results.length === 0;
+  const rowCount = commandMode ? commands.length : createMode ? CREATE_TYPES.length : itemSearch.results.length;
   const active = Math.min(activeIndex, Math.max(rowCount - 1, 0));
-  const activeEntry: SearchEntry | null = !commandMode ? itemSearch.results[active] || null : null;
+  const activeEntry: SearchEntry | null = !commandMode && !createMode ? itemSearch.results[active] || null : null;
   const activeCommand: NextCommand | null = commandMode ? commands[active] || null : null;
 
   const focusSearch = () => inputRef.current?.focus();
@@ -177,8 +206,94 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     },
   };
 
+  const openCipher = openId ? cipherById.get(openId) || null : null;
+  const editorOpen = draft !== null;
+  const panelOpen = editorOpen || !!openCipher;
+
+  const closePanels = () => {
+    setDraft(null);
+    setCreating(false);
+    setOpenId(null);
+    setShareOpen(false);
+    focusSearch();
+  };
+
   const openEntry = (entry: SearchEntry) => {
-    navigate(`/vault?cipher=${encodeURIComponent(entry.id)}`);
+    if (entry.reprompt && !unlockedIds.current.has(entry.id)) {
+      setGate({ entryId: entry.id, kind: 'open', error: '', submitting: false });
+      return;
+    }
+    setDraft(null);
+    setCreating(false);
+    setOpenId(entry.id);
+  };
+
+  const startEdit = (cipher: Cipher) => {
+    const nextDraft = draftFromCipher(cipher);
+    setDraft(nextDraft);
+    setDraftBase(JSON.stringify(nextDraft));
+    setCreating(false);
+    setOpenId(cipher.id);
+  };
+
+  const startCreate = (type: number, prefillName = '') => {
+    const nextDraft = createEmptyDraft(type);
+    nextDraft.name = prefillName;
+    setDraft(nextDraft);
+    setDraftBase(JSON.stringify(nextDraft));
+    setCreating(true);
+    setOpenId(null);
+    setQuery('');
+  };
+
+  const patchDraft = (patch: Partial<VaultDraft>) => {
+    setDraft((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const saveDraft = async () => {
+    if (!draft || saving) return;
+    if (!draft.name.trim()) return;
+    const normalized: VaultDraft = {
+      ...draft,
+      loginUris: (draft.loginUris || []).filter((u) => u.uri.trim()),
+    };
+    setSaving(true);
+    try {
+      if (creating) {
+        await props.onCreate(normalized);
+        setDraft(null);
+        setCreating(false);
+        focusSearch();
+      } else {
+        const cipher = draft.id ? cipherById.get(draft.id) : null;
+        if (cipher) await props.onUpdate(cipher, normalized);
+        setDraft(null);
+        setOpenId(draft.id || null);
+        focusSearch();
+      }
+    } catch (error) {
+      props.onNotify('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitShare = async (orgId: string, collectionIds: string[]) => {
+    const cipher = openCipher;
+    if (!cipher || shareSubmitting) return;
+    setShareSubmitting(true);
+    try {
+      await props.onShare(cipher, orgId, collectionIds);
+      setShareOpen(false);
+    } catch {
+      // The share hook reports its own error toast; keep the dialog open.
+    } finally {
+      setShareSubmitting(false);
+    }
+  };
+
+  const openClassic = (id: string) => {
+    navigate(`/vault?cipher=${encodeURIComponent(id)}`);
   };
 
   const performCopy = async (entry: SearchEntry, kind: CopyKind) => {
@@ -204,11 +319,22 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   };
 
   const requestCopy = (entry: SearchEntry, kind: CopyKind) => {
-    if (entry.reprompt) {
+    if (entry.reprompt && !unlockedIds.current.has(entry.id)) {
       setGate({ entryId: entry.id, kind, error: '', submitting: false });
       return;
     }
     void performCopy(entry, kind);
+  };
+
+  // Detail-panel copy for arbitrary values (uris, card fields, …).
+  const copyRawValue = async (value: string, label: string) => {
+    try {
+      const copy = await copySensitive(clipboardPort, value, scheduleTimeout);
+      setToast({ text: `${label} copied`, seconds: copy.canClear ? CLIPBOARD_CLEAR_SECONDS : null });
+      if (!copy.canClear) window.setTimeout(() => setToast(null), 2500);
+    } catch {
+      props.onNotify('error', t('txt_copy_failed'));
+    }
   };
 
   // Focus the gate input after it exists in the DOM (a setTimeout can fire
@@ -224,10 +350,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     setGate({ ...gate, error: '', submitting: true });
     try {
       await props.onVerifyMasterPassword(props.emailForReprompt, password);
+      unlockedIds.current.add(gate.entryId);
       const entry = itemSearch.results.find((e) => e.id === gate.entryId) || null;
       setGate(null);
       focusSearch();
-      if (entry) void performCopy(entry, gate.kind);
+      if (gate.kind === 'open') {
+        setOpenId(gate.entryId);
+      } else if (entry) {
+        void performCopy(entry, gate.kind);
+      }
     } catch (error) {
       setGate({
         ...gate,
@@ -252,7 +383,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     } else if (event.key === 'Enter') {
       event.preventDefault();
       if (commandMode) {
-        if (activeCommand) { setQuery(''); activeCommand.run(commandContext); }
+        if (activeCommand) {
+          setQuery('');
+          if (activeCommand.id === 'new-item') startCreate(1);
+          else activeCommand.run(commandContext);
+        }
+        return;
+      }
+      if (createMode) {
+        startCreate(CREATE_TYPES[active].type, query.trim());
         return;
       }
       if (!activeEntry) return;
@@ -263,6 +402,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       event.preventDefault();
       if (menuOpen) setMenuOpen(false);
       else if (browseOpen) setBrowseOpen(false);
+      else if (shareOpen) setShareOpen(false);
+      else if (panelOpen && !editorOpen) closePanels();
       else if (query) setQuery('');
     } else if (event.key === 'Backspace' && !query && scope.kind !== 'all') {
       event.preventDefault();
@@ -277,15 +418,35 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       const targetIsInput =
         event.target instanceof HTMLElement &&
         (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT');
+      // The editor and share dialog own their keys entirely.
+      if (editorOpen || shareOpen) return;
+      // Chords act on the open item when the detail panel is up, else the highlight.
+      const targetEntry = openCipher
+        ? entries.find((e) => e.id === openCipher.id) || null
+        : activeEntry;
       if (meta) {
         const key = event.key.toLowerCase();
-        if (key === 'k') { event.preventDefault(); setBrowseOpen(false); setMenuOpen(false); setQuery(''); focusSearch(); return; }
+        if (key === 'k') { event.preventDefault(); setBrowseOpen(false); setMenuOpen(false); setOpenId(null); setQuery(''); focusSearch(); return; }
         if (key === 'b') { event.preventDefault(); setMenuOpen(false); setBrowseOpen((open) => !open); return; }
-        if (!commandMode && activeEntry) {
-          if (key === 'u' && activeEntry.type === 1) { event.preventDefault(); requestCopy(activeEntry, 'username'); return; }
-          if (key === 'o' && activeEntry.hasTotp) { event.preventDefault(); requestCopy(activeEntry, 'totp'); return; }
-          if (key === 'e') { event.preventDefault(); openEntry(activeEntry); return; }
-          if (key === 'enter') { event.preventDefault(); openEntry(activeEntry); return; }
+        if (!commandMode && targetEntry) {
+          if (key === 'u' && targetEntry.type === 1) { event.preventDefault(); requestCopy(targetEntry, 'username'); return; }
+          if (key === 'o' && targetEntry.hasTotp) { event.preventDefault(); requestCopy(targetEntry, 'totp'); return; }
+          if (key === 'e') {
+            event.preventDefault();
+            const cipher = cipherById.get(targetEntry.id);
+            if (cipher) {
+              if (targetEntry.reprompt && !unlockedIds.current.has(targetEntry.id)) setGate({ entryId: targetEntry.id, kind: 'open', error: '', submitting: false });
+              else startEdit(cipher);
+            }
+            return;
+          }
+          if (key === 's' && props.shareOrganizations.length > 0 && !targetEntry.organizationId) {
+            event.preventDefault();
+            setOpenId(targetEntry.id);
+            setShareOpen(true);
+            return;
+          }
+          if (key === 'enter') { event.preventDefault(); openEntry(targetEntry); return; }
         }
         return;
       }
@@ -295,7 +456,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commandMode, activeEntry, browseOpen, gate]);
+  }, [commandMode, activeEntry, browseOpen, gate, editorOpen, shareOpen, openCipher, entries]);
 
   const markHintSeen = () => {
     setHintSeen(true);
@@ -308,7 +469,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const chip = scope.kind !== 'all' ? scopeLabel(scope) : '';
 
   return (
-    <div ref={surfaceRef} className="nw-next nx-vault">
+    <div ref={surfaceRef} className={`nw-next nx-vault${panelOpen ? ' has-panel' : ''}`}>
       <button
         type="button"
         className="nx-appmenu-btn"
@@ -373,11 +534,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             </>
           )}
 
-          {showEmptyVault && (
+          {showEmptyVault && !editorOpen && (
             <div className="nx-empty">
               <div>{STR.emptyVault}</div>
               <div className="ctas">
-                <button type="button" className="nx-btn" onClick={() => listCommands().find((c) => c.id === 'new-item')!.run(commandContext)}>
+                <button type="button" className="nx-btn" onClick={() => startCreate(1)}>
                   {STR.createFirst}
                 </button>
                 <button type="button" className="nx-btn ghost" onClick={() => navigate('/import')}>
@@ -386,6 +547,24 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               </div>
             </div>
           )}
+
+          {createMode && CREATE_TYPES.map((option, index) => (
+            <div
+              key={option.type}
+              id={`nx-row-${index}`}
+              role="option"
+              aria-selected={index === active}
+              className={`nx-row${index === active ? ' is-active' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => startCreate(option.type, query.trim())}
+            >
+              <span className="ico">＋</span>
+              <span className="main">
+                <span className="title">Create {option.label} “{query.trim()}”</span>
+              </span>
+              <span className="meta">{index === active && <span className="nx-kbd">↵</span>}</span>
+            </div>
+          ))}
 
           {commandMode
             ? commands.map((command, index) => (
@@ -507,6 +686,41 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           </div>
         )}
       </div>
+
+      {editorOpen && draft ? (
+        <EditorPanel
+          draft={draft}
+          isCreating={creating}
+          folders={props.folders}
+          saving={saving}
+          dirty={JSON.stringify(draft) !== draftBase}
+          onPatch={patchDraft}
+          onSave={() => void saveDraft()}
+          onCancel={closePanels}
+        />
+      ) : openCipher ? (
+        <DetailPanel
+          cipher={openCipher}
+          folders={props.folders}
+          canShare={props.shareOrganizations.length > 0}
+          onCopyValue={(value, label) => void copyRawValue(value, label)}
+          onEdit={() => startEdit(openCipher)}
+          onShare={() => setShareOpen(true)}
+          onOpenClassic={() => openClassic(openCipher.id)}
+          onClose={closePanels}
+        />
+      ) : null}
+
+      {shareOpen && openCipher && (
+        <ShareDialog
+          cipherName={openCipher.decName || ''}
+          organizations={props.shareOrganizations}
+          loadCollections={props.onLoadShareCollections}
+          onConfirm={(orgId, collectionIds) => void submitShare(orgId, collectionIds)}
+          onCancel={() => setShareOpen(false)}
+          submitting={shareSubmitting}
+        />
+      )}
 
       {browseOpen && (
         <BrowsePanel
