@@ -51,12 +51,20 @@ export default function NextAuditPage(props: NextAuditPageProps) {
   const fingerprint = useMemo(() => vaultFingerprint(props.ciphers), [props.ciphers]);
   const [state, setState] = useState(() => getPasswordSecurityState(fingerprint));
   const [filter, setFilter] = useState<Filter>('all');
+  // The scan cache is keyed to the vault fingerprint, so fixing a finding
+  // (which edits the vault) would wipe the report mid-loop. Keep the last
+  // report as a local snapshot so findings resolve IN PLACE (J5 criterion);
+  // Re-check refreshes against the current vault.
+  const [snapshot, setSnapshot] = useState<{ report: NonNullable<typeof state.report>; scannedAt: number | null } | null>(null);
 
   useEffect(() => {
-    setState(getPasswordSecurityState(fingerprint));
-    return subscribePasswordSecurityState(() => {
-      setState(getPasswordSecurityState(fingerprint));
-    });
+    const sync = () => {
+      const next = getPasswordSecurityState(fingerprint);
+      setState(next);
+      if (next.report) setSnapshot({ report: next.report, scannedAt: next.scannedAt });
+    };
+    sync();
+    return subscribePasswordSecurityState(sync);
   }, [fingerprint]);
 
   const entryById = useMemo(() => {
@@ -65,7 +73,8 @@ export default function NextAuditPage(props: NextAuditPageProps) {
     return map;
   }, [props.entries]);
 
-  const report = state.report;
+  const report = state.report || snapshot?.report || null;
+  const scannedAt = state.report ? state.scannedAt : snapshot?.scannedAt || null;
   const findings = useMemo(
     () => (report?.items || []).filter(
       (item) => (item.exposedCount || 0) > 0 || item.reusedCount > 1 || item.weak
@@ -90,8 +99,8 @@ export default function NextAuditPage(props: NextAuditPageProps) {
           {report ? STR.rescan : STR.scan}
         </button>
         {scanning && <span className="nx-help">{STR.scanning(state.progress.checked, state.progress.total)}</span>}
-        {!scanning && state.scannedAt && (
-          <span className="nx-help">{STR.lastChecked(new Date(state.scannedAt).toLocaleString())}</span>
+        {!scanning && scannedAt && (
+          <span className="nx-help">{STR.lastChecked(new Date(scannedAt).toLocaleString())}</span>
         )}
         {state.scanError && <span className="nx-help warn">{STR.scanError}</span>}
       </div>
