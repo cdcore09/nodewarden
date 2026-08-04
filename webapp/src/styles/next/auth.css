@@ -1,0 +1,155 @@
+/* webapp/src/styles/next/auth.css — Next unlock/login/register surface. */
+.nw-next.nx-auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--nx-sp-6);
+}
+.nx-auth .nx-auth-box {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-5);
+}
+.nx-auth .nx-wordmark {
+  font-size: var(--nx-text-md);
+  font-weight: var(--nx-weight-semibold);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: var(--nx-sp-2);
+}
+.nx-auth .nx-wordmark .nx-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--nx-accent);
+  display: grid;
+  place-items: center;
+  color: var(--nx-accent-ink);
+  font-size: 11px;
+  font-weight: var(--nx-weight-semibold);
+}
+.nx-auth h1 {
+  font-size: var(--nx-text-2xl);
+  font-weight: var(--nx-weight-semibold);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.nx-auth .nx-who {
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-muted);
+  font-family: var(--nx-font-data);
+}
+.nx-auth .nx-field { display: flex; flex-direction: column; gap: 6px; }
+.nx-auth .nx-overline {
+  font-size: var(--nx-text-xs);
+  font-weight: var(--nx-weight-semibold);
+  letter-spacing: var(--nx-tracking-caps);
+  text-transform: uppercase;
+  color: var(--nx-ink-muted);
+}
+.nx-auth .nx-input {
+  height: var(--nx-field-h);
+  padding: 0 var(--nx-sp-3);
+  border-radius: var(--nx-radius-md);
+  border: 1px solid var(--nx-line);
+  background: var(--nx-surface);
+  color: var(--nx-ink);
+  font: inherit;
+  font-size: var(--nx-text-md);
+  width: 100%;
+}
+.nx-auth .nx-input:focus-visible {
+  outline: none;
+  box-shadow: var(--nx-focus-ring);
+  border-color: transparent;
+}
+.nx-auth .nx-input.nx-password {
+  height: 44px;
+  font-family: var(--nx-font-data);
+  letter-spacing: 0.12em;
+}
+.nx-auth .nx-input[aria-invalid='true'] { border-color: var(--nx-danger); }
+.nx-auth .nx-error { font-size: var(--nx-text-sm); color: var(--nx-danger); }
+.nx-auth .nx-help { font-size: var(--nx-text-sm); color: var(--nx-ink-muted); }
+.nx-auth .nx-help.nx-ok { color: var(--nx-ok); }
+.nx-auth .nx-btn {
+  white-space: nowrap;
+  height: var(--nx-field-h);
+  padding: 0 var(--nx-sp-4);
+  border-radius: var(--nx-radius-md);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: var(--nx-text-md);
+  font-weight: var(--nx-weight-medium);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nx-sp-2);
+  cursor: pointer;
+  background: var(--nx-accent);
+  color: var(--nx-accent-ink);
+}
+.nx-auth .nx-btn:disabled { opacity: 0.55; cursor: default; }
+.nx-auth .nx-btn:focus-visible { outline: none; box-shadow: var(--nx-focus-ring); }
+.nx-auth .nx-alt {
+  display: flex;
+  gap: var(--nx-sp-4);
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-muted);
+}
+.nx-auth .nx-alt button {
+  font: inherit;
+  font-size: var(--nx-text-sm);
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--nx-ink-muted);
+  border-bottom: 1px solid var(--nx-line);
+  cursor: pointer;
+}
+.nx-auth .nx-alt button:disabled { opacity: 0.55; cursor: default; }
+.nx-auth .nx-alt button:focus-visible { outline: none; box-shadow: var(--nx-focus-ring); border-radius: 2px; }
+.nx-auth .nx-alt .nx-push { margin-left: auto; }
+.nx-auth .nx-alt-inline {
+  font: inherit;
+  font-size: var(--nx-text-sm);
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--nx-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.nx-auth .nx-working {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--nx-line-soft);
+  overflow: hidden;
+  position: relative;
+}
+.nx-auth .nx-working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 1px;
+  background: var(--nx-accent);
+  animation: nx-work 1.2s var(--nx-ease) infinite;
+}
+@keyframes nx-work {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(350%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-auth .nx-working::after { animation: none; width: 100%; opacity: 0.5; }
+}
+.nx-auth .nx-offline {
+  font-size: var(--nx-text-sm);
+  color: var(--nx-warn);
+  background: var(--nx-warn-soft);
+  border-radius: var(--nx-radius-md);
+  padding: var(--nx-sp-2) var(--nx-sp-3);
+}
