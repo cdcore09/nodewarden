@@ -677,6 +677,10 @@ function draftFromDecryptedCipher(cipher: Cipher): VaultDraft {
     passportIssuingAuthority: '',
     passportIssueDate: '',
     passportExpirationDate: '',
+    apiKeyProvider: '',
+    apiKeyKeyId: '',
+    apiKeySecret: '',
+    apiKeyExpirationDate: '',
     customFields: [],
   };
 
@@ -789,6 +793,11 @@ function draftFromDecryptedCipher(cipher: Cipher): VaultDraft {
     draft.passportIssuingAuthority = plainCipherValue(cipher.passport.decIssuingAuthority, cipher.passport.issuingAuthority);
     draft.passportIssueDate = plainCipherValue(cipher.passport.decIssueDate, cipher.passport.issueDate);
     draft.passportExpirationDate = plainCipherValue(cipher.passport.decExpirationDate, cipher.passport.expirationDate);
+  } else if (type === 9 && cipher.apiKey) {
+    draft.apiKeyProvider = plainCipherValue(cipher.apiKey.decProvider, cipher.apiKey.provider);
+    draft.apiKeyKeyId = plainCipherValue(cipher.apiKey.decKeyId, cipher.apiKey.keyId);
+    draft.apiKeySecret = plainCipherValue(cipher.apiKey.decKey, cipher.apiKey.key);
+    draft.apiKeyExpirationDate = plainCipherValue(cipher.apiKey.decExpirationDate, cipher.apiKey.expirationDate);
   }
 
   return draft;
@@ -1128,6 +1137,8 @@ function getCipherKeyMismatchProbes(cipher: Cipher): string[] {
     cipher.bankAccount?.accountNumber,
     cipher.driversLicense?.licenseNumber,
     cipher.passport?.passportNumber,
+    cipher.apiKey?.provider,
+    cipher.apiKey?.key,
     ...(cipher.fields || []).flatMap((field) => [field.name, field.value]),
   ];
   const probes: string[] = [];
@@ -1232,6 +1243,10 @@ function hasUnresolvedEncryptedFields(cipher: Cipher): boolean {
     [cipher.passport?.issuingAuthority, cipher.passport?.decIssuingAuthority],
     [cipher.passport?.issueDate, cipher.passport?.decIssueDate],
     [cipher.passport?.expirationDate, cipher.passport?.decExpirationDate],
+    [cipher.apiKey?.provider, cipher.apiKey?.decProvider],
+    [cipher.apiKey?.keyId, cipher.apiKey?.decKeyId],
+    [cipher.apiKey?.key, cipher.apiKey?.decKey],
+    [cipher.apiKey?.expirationDate, cipher.apiKey?.decExpirationDate],
     ...(cipher.fields || []).flatMap((field) => [
       [field.name, field.decName] as [unknown, unknown],
       [field.value, field.decValue] as [unknown, unknown],
@@ -1354,6 +1369,7 @@ async function buildCipherPayload(
     bankAccount: null,
     driversLicense: null,
     passport: null,
+    apiKey: null,
     fields: await encryptCustomFields(draft.customFields || [], keys.enc, keys.mac),
     passwordHistory: await encryptPasswordHistory(cipher?.passwordHistory, keys.enc, keys.mac),
   };
@@ -1481,6 +1497,19 @@ async function buildCipherPayload(
         ['issuingAuthority', 'passportIssuingAuthority'],
         ['issueDate', 'passportIssueDate'],
         ['expirationDate', 'passportExpirationDate'],
+      ],
+      draft,
+      keys.enc,
+      keys.mac
+    );
+  } else if (type === 9) {
+    payload.apiKey = await encryptObjectFields(
+      cipher?.apiKey,
+      [
+        ['provider', 'apiKeyProvider'],
+        ['keyId', 'apiKeyKeyId'],
+        ['key', 'apiKeySecret'],
+        ['expirationDate', 'apiKeyExpirationDate'],
       ],
       draft,
       keys.enc,

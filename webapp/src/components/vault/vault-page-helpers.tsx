@@ -551,6 +551,10 @@ export function createEmptyDraft(type: number): VaultDraft {
     passportIssuingAuthority: '',
     passportIssueDate: '',
     passportExpirationDate: '',
+    apiKeyProvider: '',
+    apiKeyKeyId: '',
+    apiKeySecret: '',
+    apiKeyExpirationDate: '',
     customFields: [],
   };
 }
