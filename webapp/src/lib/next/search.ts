@@ -42,6 +42,7 @@ export type ScopeFilter =
   | { kind: 'trash' }
   | { kind: 'type'; type: number }
   | { kind: 'folder'; folderId: string; label: string }
+  | { kind: 'org'; orgId: string; label: string }
   /** Normal-vault visibility; the duplicate grouping itself is applied by the caller. */
   | { kind: 'duplicates' };
 
@@ -112,6 +113,8 @@ function inScope(entry: SearchEntry, scope: ScopeFilter): boolean {
       return entry.type === scope.type;
     case 'folder':
       return entry.folderId === scope.folderId;
+    case 'org':
+      return entry.organizationId === scope.orgId;
   }
 }
 
