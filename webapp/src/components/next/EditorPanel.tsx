@@ -26,6 +26,8 @@ const STR = {
   notes: 'Notes',
   favorite: 'Favorite',
   reprompt: 'Ask for master password',
+  moreOptions: 'More options',
+  moreOptionsHint: 'folder · notes · custom fields · attachments',
   customFields: 'Custom fields',
   addField: 'Add field',
   removeField: 'Remove field',
@@ -152,6 +154,10 @@ export default function EditorPanel(props: EditorPanelProps) {
   const isLogin = props.draft.type === 1;
   const fields = FIELD_GROUPS[props.draft.type] || [];
   const customFields = props.draft.customFields || [];
+  const tailHasContent = !!(
+    props.draft.folderId || props.draft.notes.trim() || customFields.length > 0 ||
+    props.attachments.length > 0 || props.draft.favorite || props.draft.reprompt
+  );
   const attachmentsDirty = addFiles.length > 0 || removeIds.size > 0;
   const dirty = props.dirty || attachmentsDirty;
 
@@ -317,6 +323,12 @@ export default function EditorPanel(props: EditorPanelProps) {
           </label>
         ))}
 
+        <details className="nx-details" open={tailHasContent}>
+          <summary>
+            {STR.moreOptions}
+            <span style={{ color: 'var(--nx-ink-faint)' }}>{STR.moreOptionsHint}</span>
+          </summary>
+          <div className="details-body">
         <div className="nx-field">
           <span className="nx-overline">{STR.customFields}</span>
           {customFields.map((field, index) => (
@@ -479,6 +491,8 @@ export default function EditorPanel(props: EditorPanelProps) {
             {STR.reprompt}
           </label>
         </div>
+          </div>
+        </details>
       </div>
 
       <div className="pactions">

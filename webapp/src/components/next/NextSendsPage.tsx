@@ -130,6 +130,9 @@ export default function NextSendsPage(props: NextSendsPageProps) {
           ) : (
             <div className="nx-help">{STR.file}: {draft.file?.name || '—'}</div>
           )}
+          <details className="nx-details" open={!!draft.password || draft.deletionDays !== '7'}>
+            <summary>Options<span style={{ color: 'var(--nx-ink-faint)' }}>expiry · password</span></summary>
+            <div className="details-body">
           <div className="erow">
             <label className="nx-field" style={{ flex: 1 }}>
               <span className="nx-overline">{STR.deletionDays}</span>
@@ -142,6 +145,8 @@ export default function NextSendsPage(props: NextSendsPageProps) {
                 onInput={(e) => setDraft({ ...draft, password: (e.currentTarget as HTMLInputElement).value })} />
             </label>
           </div>
+            </div>
+          </details>
           <div style={{ display: 'flex', gap: 'var(--nx-sp-2)' }}>
             <button type="button" className="nx-btn" disabled={saving || !draft.name.trim()} onClick={() => void save()}>
               {saving ? STR.saving : STR.save} <span className="nx-kbd on-fill">⌘↵</span>

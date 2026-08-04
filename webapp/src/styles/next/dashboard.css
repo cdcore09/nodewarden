@@ -408,3 +408,33 @@
 }
 
 h1.scope-title { margin: 0; font-size: var(--nx-text-lg); }
+
+/* ── slice 6: progressive disclosure ── */
+details.nx-details { border-top: 1px solid var(--nx-line-soft); padding-top: var(--nx-sp-2); }
+details.nx-details > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--nx-sp-2);
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-muted);
+  padding: var(--nx-sp-1) 0;
+  border-radius: var(--nx-radius-sm);
+}
+details.nx-details > summary::-webkit-details-marker { display: none; }
+details.nx-details > summary::before {
+  content: '▸';
+  font-size: 10px;
+  color: var(--nx-ink-faint);
+  transition: transform var(--nx-dur-1) var(--nx-ease);
+}
+details.nx-details[open] > summary::before { transform: rotate(90deg); }
+details.nx-details > summary:hover { color: var(--nx-ink); }
+details.nx-details > summary:focus-visible { outline: none; box-shadow: var(--nx-focus-ring); }
+details.nx-details > .details-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-4);
+  padding-top: var(--nx-sp-3);
+}
