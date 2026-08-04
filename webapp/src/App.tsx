@@ -134,6 +134,7 @@ const APP_ROUTE_PATHS = [
   SETTINGS_ACCOUNT_ROUTE,
   SETTINGS_DOMAIN_RULES_ROUTE,
   '/help',
+  '/next', // NodeWarden Next (issue #16): V2 retrieval surface
   ...IMPORT_ROUTE_PATHS,
 ] as const;
 const AUTH_ROUTES: ReadonlySet<string> = new Set(AUTH_ROUTE_PATHS);
