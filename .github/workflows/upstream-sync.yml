@@ -79,6 +79,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Prepare git
         env:
@@ -164,7 +165,7 @@ jobs:
             instead. Push only that branch (never force), then open exactly one PR:
               gh pr create --base main --head <branch> \
                 --title "chore(sync): upstream shuaiplus/nodewarden <short-sha> (${{ needs.check.outputs.behind }} commits)" \
-                --label upstream-sync --reviewer cdcore09 --body "<markdown>"
+                --label upstream-sync --assignee cdcore09 --body "<markdown>"
             The PR body must contain: the list of upstream commits included, the
             Phase 2 security/supply-chain screen results (state explicitly what was
             checked and found clean), the Phase 4 verification results (each command

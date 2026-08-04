@@ -69,6 +69,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Prepare git
         env:
@@ -90,7 +91,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: |
-            --allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(bash:*),Bash(curl:*),Bash(jq:*),Read,Grep,Glob,Edit,Write"
+            --allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(jq:*),Read,Grep,Glob,Edit,Write"
             --max-turns 120
           prompt: |
             You are the Bitwarden release watcher for cdcore09/nodewarden, a
@@ -136,15 +137,18 @@ jobs:
             ## Phase 3 — Act, tiered
             Bucket (a) findings: implement the port yourself on branch
             port/bw-${{ needs.check.outputs.tag }}-<topic> following existing
-            patterns in src/. Include the cli-version bump from Phase 0 (if
-            any) in this same branch so pin and fixes land together. Verify
+            patterns in src/. If a branch with that name already exists on
+            origin, do not push over it — record the collision for Phase 4
+            and treat this port as abandoned. Include the cli-version bump
+            from Phase 0 (if any) in this same branch so pin and fixes land
+            together. Verify
             with `npm run build`, `npm run test:orgs`,
             `npm run test:config-compatibility`, and
             `npm run test:client-compat`. All green: push the branch (never
             force) and open ONE PR:
               gh pr create --base main --head <branch> \
                 --title "fix(compat): port <topic> from ${{ needs.check.outputs.tag }}" \
-                --label bw-watch --reviewer cdcore09 --body "<markdown>"
+                --label bw-watch --assignee cdcore09 --body "<markdown>"
             The body must cite the upstream release item, explain the port,
             and paste verification results. If you cannot get the checks
             green, abandon cleanly: git reset --hard origin/main, delete the
