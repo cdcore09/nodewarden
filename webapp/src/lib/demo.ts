@@ -21,6 +21,7 @@ import type {
 } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { dispatchBackupProgress } from '@/lib/backup-restore-progress';
+import * as orgCrypto from '@/lib/org-crypto';
 
 type Notify = (type: 'success' | 'error' | 'warning', text: string) => void;
 type StateSetter<T> = (next: T[] | ((prev: T[]) => T[])) => void;
@@ -68,6 +69,130 @@ export const DEMO_ORG_COLLECTIONS: Array<{ id: string; name: string }> = [
   { id: 'col-demo-infra', name: 'Infrastructure' },
   { id: 'col-demo-shared', name: 'Shared logins' },
 ];
+
+// ── demo org management backend ──────────────────────────────────────────
+// The Next org page talks to the same REST endpoints as production through
+// the same hooks; in demo those endpoints are served in-memory below, with
+// REAL crypto round-trips (org-key EncString names, RSA-wrapped confirm) so
+// nothing in the UI path is stubbed.
+export const DEMO_ORG_KEY: Uint8Array = new Uint8Array(64).map((_, i) => (i * 37 + 11) % 256);
+export const DEMO_ORG_KEYS: Record<string, Uint8Array> = { 'org-demo-acme': DEMO_ORG_KEY };
+
+interface DemoOrgMemberRow {
+  id: string;
+  userId: string | null;
+  email: string;
+  name: string | null;
+  type: number;
+  status: number;
+}
+
+const demoOrgMembers: DemoOrgMemberRow[] = [
+  { id: 'orguser-demo-owner', userId: DEMO_USER_ID, email: 'demo@nodewarden.app', name: 'NodeWarden Demo', type: 0, status: 2 },
+  { id: 'orguser-demo-rene', userId: 'demo-user-rene', email: 'rene@nodewarden.app', name: 'René Ortiz', type: 2, status: 2 },
+  { id: 'orguser-demo-jo', userId: 'demo-user-jo', email: 'jo@nodewarden.app', name: null, type: 2, status: 1 },
+  { id: 'orguser-demo-sam', userId: null, email: 'sam@nodewarden.app', name: null, type: 2, status: 0 },
+];
+const demoOrgCollections: Array<{ id: string; name: string }> = DEMO_ORG_COLLECTIONS.map((c) => ({ ...c }));
+const demoOrgGrants = new Map<string, Array<{ id: string; readOnly: boolean; hidePasswords: boolean }>>([
+  ['col-demo-infra', [{ id: 'orguser-demo-rene', readOnly: false, hidePasswords: false }]],
+  ['col-demo-shared', [{ id: 'orguser-demo-rene', readOnly: true, hidePasswords: true }]],
+]);
+
+let demoRsaPublicKeyB64: string | null = null;
+async function demoPublicKey(): Promise<string> {
+  if (demoRsaPublicKeyB64) return demoRsaPublicKeyB64;
+  const pair = await crypto.subtle.generateKey(
+    { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-1' },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey));
+  let bin = '';
+  for (const byte of spki) bin += String.fromCharCode(byte);
+  demoRsaPublicKeyB64 = btoa(bin);
+  return demoRsaPublicKeyB64;
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+export function createDemoOrgFetch(): (input: string, init?: RequestInit) => Promise<Response> {
+  const { encryptWithOrgKey, decryptWithOrgKey } = orgCrypto;
+  return async (input: string, init?: RequestInit) => {
+    const method = String(init?.method || 'GET').toUpperCase();
+    const url = String(input);
+    const readBody = (): Record<string, unknown> => {
+      try { return JSON.parse(String(init?.body || '{}')); } catch { return {}; }
+    };
+
+    const pubKeyMatch = url.match(/\/api\/users\/([^/]+)\/public-key$/);
+    if (pubKeyMatch && method === 'GET') {
+      return jsonResponse({ publicKey: await demoPublicKey() });
+    }
+
+    const orgMatch = url.match(/\/api\/organizations\/([^/]+)(\/.*)?$/);
+    if (!orgMatch) return jsonResponse({ message: 'Not available in the demo' }, 404);
+    const rest = orgMatch[2] || '';
+
+    if (rest === '/users' && method === 'GET') {
+      return jsonResponse({ data: demoOrgMembers.map((m) => ({ ...m })) });
+    }
+    if (rest === '/users/invite' && method === 'POST') {
+      const emails = Array.isArray(readBody().emails) ? (readBody().emails as string[]) : [];
+      for (const email of emails) {
+        if (demoOrgMembers.some((m) => m.email === email)) {
+          return jsonResponse({ message: 'A member with this email already exists in the organization' }, 400);
+        }
+        demoOrgMembers.push({ id: createDemoId('orguser'), userId: null, email, name: null, type: 2, status: 0 });
+      }
+      return new Response(null, { status: 200 });
+    }
+    const memberAction = rest.match(/^\/users\/([^/]+)\/(reinvite|confirm|remove|accept)$/);
+    if (memberAction && method === 'POST') {
+      const row = demoOrgMembers.find((m) => m.id === memberAction[1]);
+      if (!row) return jsonResponse({ message: 'Member not found' }, 404);
+      if (memberAction[2] === 'confirm') row.status = 2;
+      if (memberAction[2] === 'remove') demoOrgMembers.splice(demoOrgMembers.indexOf(row), 1);
+      return new Response(null, { status: 200 });
+    }
+
+    if (rest === '/collections' && method === 'GET') {
+      const data = [] as Array<{ id: string; name: string }>;
+      for (const c of demoOrgCollections) data.push({ id: c.id, name: await encryptWithOrgKey(c.name, DEMO_ORG_KEY) });
+      return jsonResponse({ data });
+    }
+    if (rest === '/collections' && method === 'POST') {
+      const name = await decryptWithOrgKey(String(readBody().name || ''), DEMO_ORG_KEY);
+      demoOrgCollections.push({ id: createDemoId('collection'), name });
+      return new Response(null, { status: 200 });
+    }
+    const colMatch = rest.match(/^\/collections\/([^/]+)$/);
+    if (colMatch && method === 'PUT') {
+      const row = demoOrgCollections.find((c) => c.id === colMatch[1]);
+      if (row) row.name = await decryptWithOrgKey(String(readBody().name || ''), DEMO_ORG_KEY);
+      return new Response(null, { status: 200 });
+    }
+    if (colMatch && method === 'DELETE') {
+      const index = demoOrgCollections.findIndex((c) => c.id === colMatch[1]);
+      if (index >= 0) demoOrgCollections.splice(index, 1);
+      demoOrgGrants.delete(colMatch[1]);
+      return new Response(null, { status: 200 });
+    }
+    const grantsMatch = rest.match(/^\/collections\/([^/]+)\/users$/);
+    if (grantsMatch && method === 'GET') {
+      return jsonResponse(demoOrgGrants.get(grantsMatch[1]) || []);
+    }
+    if (grantsMatch && method === 'PUT') {
+      const users = Array.isArray(readBody().users) ? (readBody().users as Array<{ id: string; readOnly?: boolean; hidePasswords?: boolean }>) : [];
+      demoOrgGrants.set(grantsMatch[1], users.map((u) => ({ id: String(u.id), readOnly: !!u.readOnly, hidePasswords: !!u.hidePasswords })));
+      return new Response(null, { status: 200 });
+    }
+
+    return jsonResponse({ message: 'Not available in the demo' }, 404);
+  };
+}
 
 export const DEMO_SESSION: SessionState = {
   accessToken: 'demo-access-token',

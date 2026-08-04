@@ -42,3 +42,9 @@ export function getDemoPublicSend(): null {
 export function demoBrandIconUrl(_host: string): string {
   return '';
 }
+
+export const DEMO_ORG_KEYS: Record<string, Uint8Array> = {};
+
+export function createDemoOrgFetch(): (input: string, init?: RequestInit) => Promise<Response> {
+  return async () => new Response(null, { status: 404 });
+}

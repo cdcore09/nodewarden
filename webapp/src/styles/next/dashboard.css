@@ -867,3 +867,76 @@ details.nx-details > .details-body {
 }
 .nw-next .nx-folderpick .mrow:hover { background: var(--nx-line-soft); }
 .nw-next .nx-folderpick .mrow.is-active { background: var(--nx-accent-soft); color: var(--nx-accent); }
+
+/* ── slice 10: organizations page + share clarity ── */
+.nw-next .totp-intro { max-width: 64ch; margin-bottom: var(--nx-sp-4); }
+.nw-next .nx-orgs { max-width: 1160px; }
+.nw-next .nx-orgs .org-intro { max-width: 64ch; margin-bottom: var(--nx-sp-3); }
+.nw-next .org-head { display: flex; align-items: baseline; gap: var(--nx-sp-3); flex-wrap: wrap; margin-bottom: var(--nx-sp-2); }
+.nw-next .org-head .org-name { margin: 0; font-size: var(--nx-text-xl); font-weight: var(--nx-weight-semibold); }
+.nw-next .org-head .org-switch { width: auto; min-width: 220px; height: 34px; }
+.nw-next .org-head .org-meta { font-size: var(--nx-text-sm); color: var(--nx-ink-faint); }
+.nw-next .org-how { margin-bottom: var(--nx-sp-4); max-width: 72ch; }
+.nw-next .org-levels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--nx-sp-2); }
+.nw-next .org-levels li { display: flex; align-items: baseline; gap: var(--nx-sp-3); font-size: var(--nx-text-sm); color: var(--nx-ink-muted); }
+.nw-next .org-levels strong { color: var(--nx-ink); font-weight: var(--nx-weight-medium); }
+.nw-next .org-levels .n {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--nx-text-xs);
+  background: var(--nx-inset);
+  border: 1px solid var(--nx-line-soft);
+  color: var(--nx-ink-muted);
+}
+.nw-next .org-grid { display: grid; grid-template-columns: 1fr; gap: var(--nx-sp-4); align-items: start; }
+@media (min-width: 1100px) { .nw-next .org-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.nw-next .org-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-2);
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  box-shadow: var(--nx-shadow-1);
+}
+.nw-next .org-card-head { display: flex; align-items: center; gap: var(--nx-sp-2); margin-bottom: var(--nx-sp-1); color: var(--nx-ink-muted); }
+.nw-next .org-card-head .head-title { font-weight: var(--nx-weight-semibold); color: var(--nx-ink); flex: 1; }
+.nw-next .org-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-sp-3);
+  padding: var(--nx-sp-2) 0;
+  border-top: 1px solid var(--nx-line-soft);
+  min-width: 0;
+}
+.nw-next .org-row .who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.nw-next .org-row .who .title { font-weight: var(--nx-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-next .org-row .who .sub { font-size: var(--nx-text-xs); color: var(--nx-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nw-next .org-row .who .sub.state { color: var(--nx-ink-faint); }
+.nw-next .org-row .acts { display: flex; align-items: center; gap: var(--nx-sp-1); flex-shrink: 0; }
+.nw-next .nx-badge.quiet { background: var(--nx-inset); color: var(--nx-ink-faint); }
+.nw-next .nx-btn.danger-ink { color: var(--nx-danger); }
+.nw-next .org-phrase {
+  padding: var(--nx-sp-3);
+  border: 1px dashed var(--nx-accent-line);
+  border-radius: var(--nx-radius-md);
+  background: var(--nx-inset);
+  font-size: var(--nx-text-md);
+  letter-spacing: 0.02em;
+  word-break: break-word;
+}
+.nw-next .org-grant-list { display: flex; flex-direction: column; gap: var(--nx-sp-2); max-height: 40vh; overflow-y: auto; }
+.nw-next .org-grant { display: flex; flex-direction: column; gap: var(--nx-sp-1); }
+.nw-next .org-grant .grant-main { display: flex; align-items: center; gap: var(--nx-sp-2); font-size: var(--nx-text-sm); cursor: pointer; }
+.nw-next .org-grant .grant-flags { margin-left: var(--nx-sp-6); }
+.nw-next .org-grant .grant-flag { display: flex; align-items: center; gap: var(--nx-sp-2); font-size: var(--nx-text-sm); color: var(--nx-ink-muted); cursor: pointer; padding: 2px 0; }
+.nw-next .nx-option .opt-org { color: var(--nx-ink-faint); }
+.nw-next .nx-option .opt-sep { color: var(--nx-ink-faint); }
+.nw-next .shared-note { align-self: center; }
+.nw-next .nx-menu .mrow.is-static { color: var(--nx-ink-faint); cursor: default; }
+.nw-next .nx-menu .mrow.is-static:hover { background: transparent; }

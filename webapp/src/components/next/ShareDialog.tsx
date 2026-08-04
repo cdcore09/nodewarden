@@ -127,6 +127,8 @@ export default function ShareDialog(props: ShareDialogProps) {
               {collections.map((collection) => (
                 <button type="button" key={collection.id} className="nx-option" onClick={() => toggle(collection.id)}>
                   <span className={`nx-check${selected.has(collection.id) ? ' on' : ''}`}>{selected.has(collection.id) ? '✓' : ''}</span>
+                  <span className="opt-org">{props.organizations.find((o) => o.id === orgId)?.name}</span>
+                  <span className="opt-sep" aria-hidden="true">·</span>
                   {collection.name || STR.lockedCollection}
                 </button>
               ))}
