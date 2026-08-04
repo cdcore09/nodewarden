@@ -17,7 +17,22 @@ export interface SearchEntry {
   organizationId: string | null;
   reprompt: boolean;
   hasTotp: boolean;
+  revisionDate: number;
+  creationDate: number;
   haystack: string[];
+}
+
+export type SortMode = 'name' | 'edited' | 'created';
+
+export function sortEntries(entries: SearchEntry[], mode: SortMode): SearchEntry[] {
+  const sorted = entries.slice();
+  if (mode === 'name') {
+    sorted.sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    const key = mode === 'edited' ? 'revisionDate' : 'creationDate';
+    sorted.sort((a, b) => (b[key] || 0) - (a[key] || 0) || a.name.localeCompare(b.name));
+  }
+  return sorted;
 }
 
 export type ScopeFilter =
@@ -26,7 +41,9 @@ export type ScopeFilter =
   | { kind: 'archive' }
   | { kind: 'trash' }
   | { kind: 'type'; type: number }
-  | { kind: 'folder'; folderId: string; label: string };
+  | { kind: 'folder'; folderId: string; label: string }
+  /** Normal-vault visibility; the duplicate grouping itself is applied by the caller. */
+  | { kind: 'duplicates' };
 
 function cardLast4(value: string | null | undefined): string {
   const digits = String(value || '').replace(/\D+/g, '');
@@ -73,6 +90,8 @@ export function buildSearchEntries(ciphers: Cipher[], folders: Folder[]): Search
       organizationId: cipher.organizationId || null,
       reprompt: cipher.reprompt === 1,
       hasTotp: !!cipher.login?.decTotp,
+      revisionDate: Date.parse(cipher.revisionDate || '') || 0,
+      creationDate: Date.parse(cipher.creationDate || '') || 0,
       haystack,
     };
   });
@@ -85,6 +104,7 @@ function inScope(entry: SearchEntry, scope: ScopeFilter): boolean {
   if (entry.archived) return false;
   switch (scope.kind) {
     case 'all':
+    case 'duplicates':
       return true;
     case 'favorites':
       return entry.favorite;

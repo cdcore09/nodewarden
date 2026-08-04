@@ -1,32 +1,10 @@
 /* webapp/src/styles/next/detail.css — Next item detail + editor + share (slice 3).
    Ported from docs/nodewarden-next/mockups/03,04,05. */
 
-/* split layout: results column + detail panel on wide screens */
-.nw-next.nx-vault.has-panel .nx-col { max-width: var(--nx-col-max); }
-@media (min-width: 1100px) {
-  .nw-next.nx-vault.has-panel {
-    display: grid;
-    grid-template-columns: 1fr 420px;
-    align-items: stretch;
-    padding-right: 0;
-  }
-  .nw-next.nx-vault.has-panel > .nx-col {
-    justify-self: center;
-    width: 100%;
-  }
-  .nw-next.nx-vault.has-panel > .nx-panel {
-    border-left: 1px solid var(--nx-line-soft);
-    background: var(--nx-surface);
-    min-height: 100vh;
-    min-height: 100dvh;
-  }
-}
-@media (max-width: 1099.9px) {
-  .nw-next.nx-vault.has-panel > .nx-col { display: none; }
-  .nw-next.nx-vault.has-panel > .nx-panel { width: 100%; max-width: var(--nx-col-max); }
-}
-
+/* (slice 4) the panel's grid placement lives in dashboard.css; this file owns
+   the panel's interior. */
 .nx-panel {
+  background: var(--nx-surface);
   padding: var(--nx-sp-6);
   display: flex;
   flex-direction: column;

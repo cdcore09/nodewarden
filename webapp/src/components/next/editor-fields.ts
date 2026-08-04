@@ -10,6 +10,7 @@ export interface EditorField {
   key: keyof VaultDraft;
   label: string;
   mono?: boolean;
+  textarea?: boolean;
 }
 
 export const FIELD_GROUPS: Record<number, EditorField[]> = {
@@ -54,6 +55,11 @@ export const FIELD_GROUPS: Record<number, EditorField[]> = {
     { key: 'licenseIssueDate', label: 'Issue date', mono: true },
     { key: 'licenseExpirationDate', label: 'Expiration date', mono: true },
     { key: 'licenseClass', label: 'Class' },
+  ],
+  5: [
+    { key: 'sshPublicKey', label: 'Public key', mono: true, textarea: true },
+    { key: 'sshPrivateKey', label: 'Private key', mono: true, textarea: true },
+    { key: 'sshFingerprint', label: 'Fingerprint', mono: true },
   ],
   8: [
     { key: 'passportSurname', label: 'Surname' },

@@ -2535,6 +2535,14 @@ export default function App() {
           onShare={effectiveMainRoutesProps.onShareVaultItem}
           onLoadShareCollections={effectiveMainRoutesProps.onLoadShareCollections}
           shareOrganizations={effectiveMainRoutesProps.shareOrganizations}
+          onDelete={effectiveMainRoutesProps.onDeleteVaultItem}
+          onArchive={effectiveMainRoutesProps.onArchiveVaultItem}
+          onUnarchive={effectiveMainRoutesProps.onUnarchiveVaultItem}
+          onRestore={effectiveMainRoutesProps.onRestoreVaultItems}
+          onBulkPermanentDelete={effectiveMainRoutesProps.onBulkPermanentDeleteVaultItems}
+          onRefresh={effectiveMainRoutesProps.onRefreshVault}
+          onDownloadAttachment={effectiveMainRoutesProps.onDownloadVaultAttachment}
+          downloadingAttachmentKey={effectiveMainRoutesProps.downloadingAttachmentKey}
           onLock={handleLock}
           onLogout={logoutNow}
           onNotify={pushToast}

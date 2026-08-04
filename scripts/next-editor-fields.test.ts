@@ -17,8 +17,8 @@ test('every field group key exists on the corresponding empty draft', () => {
   }
 });
 
-test('covers the non-login, non-ssh types', () => {
-  for (const type of [3, 4, 6, 7, 8]) {
+test('covers the non-login types including ssh', () => {
+  for (const type of [3, 4, 5, 6, 7, 8]) {
     assert.ok((FIELD_GROUPS[type] || []).length > 0, `missing field group for type ${type}`);
   }
 });
