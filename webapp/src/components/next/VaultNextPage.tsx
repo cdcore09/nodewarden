@@ -620,7 +620,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       } else if (event.key === 'Escape') {
         if (panelOpen) { event.preventDefault(); closePanels(); }
         else if (selectedIndex >= 0) { event.preventDefault(); setSelectedIndex(-1); }
-      } else if (!targetIsInput && !meta && !event.altKey && event.key === '?') {
+      } else if (!targetIsInput && !meta && !event.altKey && (event.key === '?' || (event.key === '/' && event.shiftKey))) {
         // "?" opens the shortcut cheat sheet — the discoverability layer.
         event.preventDefault();
         setSheetOpen(true);
