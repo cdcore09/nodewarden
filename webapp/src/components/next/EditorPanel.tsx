@@ -26,6 +26,8 @@ const STR = {
   notes: 'Notes',
   favorite: 'Favorite',
   reprompt: 'Ask for master password',
+  moreOptions: 'More options',
+  moreOptionsHint: 'folder · notes · custom fields · attachments',
   customFields: 'Custom fields',
   addField: 'Add field',
   removeField: 'Remove field',
@@ -86,7 +88,7 @@ function GeneratorWell(props: { onUse: (value: string) => void }) {
         <span className="cand">{candidate}</span>
         <span className="gpush">
           <span className={`nx-badge ${strengthIndex >= 3 ? 'ok' : 'warn'}`}>{STR.strength[strengthIndex]}</span>
-          <button type="button" className="nx-btn ghost" style={{ height: 26, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }} onClick={use}>
+          <button type="button" className="nx-btn ghost sm" onClick={use}>
             <span className="nx-kbd">⌘G</span> {STR.useReroll}
           </button>
           <button
@@ -152,6 +154,10 @@ export default function EditorPanel(props: EditorPanelProps) {
   const isLogin = props.draft.type === 1;
   const fields = FIELD_GROUPS[props.draft.type] || [];
   const customFields = props.draft.customFields || [];
+  const tailHasContent = !!(
+    props.draft.folderId || props.draft.notes.trim() || customFields.length > 0 ||
+    props.attachments.length > 0 || props.draft.favorite || props.draft.reprompt
+  );
   const attachmentsDirty = addFiles.length > 0 || removeIds.size > 0;
   const dirty = props.dirty || attachmentsDirty;
 
@@ -287,8 +293,7 @@ export default function EditorPanel(props: EditorPanelProps) {
               <div>
                 <button
                   type="button"
-                  className="nx-btn ghost"
-                  style={{ height: 28, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+                  className="nx-btn ghost sm-plus"
                   onClick={() => props.onPatch({ loginUris: [...uris, { uri: '', match: null }] })}
                 >
                   {STR.addWebsite}
@@ -318,6 +323,12 @@ export default function EditorPanel(props: EditorPanelProps) {
           </label>
         ))}
 
+        <details className="nx-details" open={tailHasContent}>
+          <summary>
+            {STR.moreOptions}
+            <span style={{ color: 'var(--nx-ink-faint)' }}>{STR.moreOptionsHint}</span>
+          </summary>
+          <div className="details-body">
         <div className="nx-field">
           <span className="nx-overline">{STR.customFields}</span>
           {customFields.map((field, index) => (
@@ -373,8 +384,7 @@ export default function EditorPanel(props: EditorPanelProps) {
           <div>
             <button
               type="button"
-              className="nx-btn ghost"
-              style={{ height: 28, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+              className="nx-btn ghost sm-plus"
               onClick={() => props.onPatch({ customFields: [...customFields, { type: 0, label: '', value: '' }] })}
             >
               {STR.addField}
@@ -432,8 +442,7 @@ export default function EditorPanel(props: EditorPanelProps) {
             />
             <button
               type="button"
-              className="nx-btn ghost"
-              style={{ height: 28, padding: '0 10px', fontSize: 'var(--nx-text-sm)' }}
+              className="nx-btn ghost sm-plus"
               onClick={() => fileRef.current?.click()}
             >
               {STR.addAttachment}
@@ -482,6 +491,8 @@ export default function EditorPanel(props: EditorPanelProps) {
             {STR.reprompt}
           </label>
         </div>
+          </div>
+        </details>
       </div>
 
       <div className="pactions">
@@ -489,7 +500,7 @@ export default function EditorPanel(props: EditorPanelProps) {
           <div className="nx-guard">
             <span>{STR.discardPrompt}</span>
             <span className="grow" />
-            <button type="button" className="nx-btn ghost" style={{ borderColor: 'var(--nx-warn)', color: 'var(--nx-warn)' }} onClick={props.onCancel}>
+            <button type="button" className="nx-btn ghost warn" onClick={props.onCancel}>
               {STR.discard}
             </button>
             <button type="button" className="nx-btn ghost" onClick={() => setGuard(false)}>
@@ -499,7 +510,7 @@ export default function EditorPanel(props: EditorPanelProps) {
         ) : (
           <>
             <button type="button" className="nx-btn" disabled={props.saving || !props.draft.name.trim()} onClick={save}>
-              {props.saving ? STR.saving : STR.save} <span className="nx-kbd" style={{ borderColor: 'transparent', background: 'rgba(255,255,255,.2)', color: 'inherit' }}>⌘↵</span>
+              {props.saving ? STR.saving : STR.save} <span className="nx-kbd on-fill">⌘↵</span>
             </button>
             <button type="button" className="nx-btn ghost" disabled={props.saving} onClick={requestCancel}>
               {STR.cancel}

@@ -17,6 +17,7 @@ import NextGeneratorPage from './NextGeneratorPage';
 import NextSendsPage from './NextSendsPage';
 import NextSettingsPage from './NextSettingsPage';
 import ShortcutSheet from './ShortcutSheet';
+import { useDialogFocus } from './useDialogFocus';
 import type { Send, SendDraft } from '@/lib/types';
 import { generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { t } from '@/lib/i18n';
@@ -237,7 +238,32 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [railCollapsed, setRailCollapsed] = useState(() => {
     try { return window.localStorage.getItem('nodewarden.next.rail.v1') === 'collapsed'; } catch { return false; }
   });
+  // Under 900px the rail leaves the grid entirely; the same toggle opens it
+  // as a drawer overlay instead (session-only state, never persisted).
+  const [railDrawerOpen, setRailDrawerOpen] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 899.9px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 899.9px)');
+    const onChange = () => {
+      setIsNarrow(mq.matches);
+      if (!mq.matches) setRailDrawerOpen(false);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
+    if (!railDrawerOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.stopPropagation(); setRailDrawerOpen(false); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [railDrawerOpen]);
   const toggleRail = () => {
+    if (isNarrow) {
+      setRailDrawerOpen((prev) => !prev);
+      return;
+    }
     setRailCollapsed((prev) => {
       try { window.localStorage.setItem('nodewarden.next.rail.v1', prev ? 'open' : 'collapsed'); } catch { /* session only */ }
       return !prev;
@@ -315,14 +341,34 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  useEffect(() => {
-    if (gate) gateRef.current?.focus();
-  }, [gate?.entryId, gate?.kind]);
+  // Focus handling for the gate lives in GateBox (trap + restore).
 
   const setSort = (mode: SortMode) => {
     setSortState(mode);
     try { window.localStorage.setItem(SORT_KEY, mode); } catch { /* session-only */ }
   };
+
+  function TrappedDialog(props: { label: string; children: preact.ComponentChildren; onClose?: () => void; alert?: boolean }) {
+    const boxRef = useRef<HTMLDivElement>(null);
+    useDialogFocus(boxRef);
+    return (
+      <div className="nx-scrim" style={{ zIndex: 35 }}>
+        <div
+          ref={boxRef}
+          className="nx-dialog mini"
+          role={props.alert ? 'alertdialog' : 'dialog'}
+          aria-modal="true"
+          aria-label={props.label}
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && props.onClose) { e.preventDefault(); e.stopPropagation(); props.onClose(); }
+          }}
+        >
+          {props.children}
+        </div>
+      </div>
+    );
+  }
 
   const commandContext: NextCommandContext = {
     navigate,
@@ -637,7 +683,10 @@ export default function VaultNextPage(props: VaultNextPageProps) {
 
   useEffect(() => {
     if (selectedIndex < 0) return;
-    listRef.current?.querySelectorAll('.nx-row')[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+    const row = listRef.current?.querySelectorAll<HTMLElement>('.nx-row')[selectedIndex];
+    row?.scrollIntoView({ block: 'nearest' });
+    // Keep DOM focus on the selection when keyboard users are in the list.
+    if (listRef.current?.contains(document.activeElement)) row?.focus();
   }, [selectedIndex]);
 
   const railLink = (
@@ -666,8 +715,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const rowMenuUri = rowMenuCipher?.login?.uris?.find((u) => u.decUri || u.uri);
 
   return (
-    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}`}>
-      <nav className="nx-rail" aria-label="Vault">
+    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}${railDrawerOpen ? ' rail-drawer' : ''}`}>
+      {railDrawerOpen && <div className="nx-rail-scrim" onClick={() => setRailDrawerOpen(false)} />}
+      <nav
+        className="nx-rail"
+        aria-label="Vault"
+        onClick={(e) => {
+          if (railDrawerOpen && (e.target as HTMLElement).closest('button, a')) setRailDrawerOpen(false);
+        }}
+      >
         <div className="nx-wordmark"><span className="nx-mark" aria-hidden="true">N</span> NodeWarden</div>
 
         <div className="rail-group">
@@ -744,15 +800,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         <header className="nx-dashhead">
           <button
             type="button"
-            className="nx-iconbtn"
-            title={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!railCollapsed}
-            style={{ width: 34, height: 34 }}
+            className="nx-iconbtn lg"
+            title={isNarrow ? 'Open navigation' : railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={isNarrow ? railDrawerOpen : !railCollapsed}
             onClick={toggleRail}
           >
             <PanelLeft size={15} />
           </button>
-          <span className="scope-title">{page === 'vault' ? scopeTitle(scope) : PAGE_TITLES[page]}</span>
+          <h1 className="scope-title">{page === 'vault' ? scopeTitle(scope) : PAGE_TITLES[page]}</h1>
           {page === 'vault' && <span className="scope-count">{scopedTotal}</span>}
           {page === 'vault' && scope.kind === 'duplicates' && (
             <select
@@ -770,9 +825,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           {page === 'vault' && (
           <button
             type="button"
-            className="nx-iconbtn"
+            className="nx-iconbtn lg"
             title={t('txt_sync_vault')}
-            style={{ width: 34, height: 34 }}
             disabled={syncing}
             onClick={() => void syncVault()}
           >
@@ -807,7 +861,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             <span className="grow">{STR.searchTrigger}</span>
             <span className="nx-kbd">⌘K</span>
           </button>
-          <button type="button" className="nx-iconbtn" title="Keyboard shortcuts — ?" style={{ width: 34, height: 34 }} onClick={() => setSheetOpen(true)}>
+          <button type="button" className="nx-iconbtn lg" title="Keyboard shortcuts — ?" onClick={() => setSheetOpen(true)}>
             <HelpCircle size={15} />
           </button>
           {page === 'vault' && (<>
@@ -917,6 +971,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               role="option"
               aria-selected={index === selectedIndex || entry.id === openId}
               className={`nx-row${index === selectedIndex || entry.id === openId ? ' is-active' : ''}${entry.id === copiedId ? ' is-copied' : ''}`}
+              tabIndex={index === Math.max(selectedIndex, 0) ? 0 : -1}
+              onFocus={() => setSelectedIndex(index)}
               onClick={() => { setSelectedIndex(index); openEntry(entry); }}
               onContextMenu={(e) => { e.preventDefault(); setSelectedIndex(index); setRowMenu({ entryId: entry.id, x: e.clientX, y: e.clientY }); }}
             >
@@ -1009,7 +1065,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           <div
             className="nx-menu"
             role="menu"
+            ref={(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.querySelector<HTMLElement>('.mrow')?.focus(); } }}
             style={{ left: Math.min(rowMenu.x, window.innerWidth - 240), top: Math.min(rowMenu.y, window.innerHeight - 280), zIndex: 20 }}
+            onKeyDown={(e) => {
+              const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.mrow'));
+              const current = items.indexOf(document.activeElement as HTMLElement);
+              if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(current + 1, items.length - 1)]?.focus(); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(current - 1, 0)]?.focus(); }
+              else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setRowMenu(null); }
+            }}
           >
             <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); openEntry(rowMenuEntry); }}>
               <SquareArrowOutUpRight size={13} />Open <span className="k nx-kbd">↵</span>
@@ -1047,7 +1111,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 <button type="button" role="menuitem" className="mrow" onClick={() => void runRowAction(rowMenuEntry, 'restore')}>
                   <Undo2 size={13} />{STR.restore}
                 </button>
-                <button type="button" role="menuitem" className="mrow" style={{ color: 'var(--nx-danger)' }} onClick={() => void runRowAction(rowMenuEntry, 'delete-forever')}>
+                <button type="button" role="menuitem" className="mrow danger" onClick={() => void runRowAction(rowMenuEntry, 'delete-forever')}>
                   <Trash2 size={13} />{STR.deleteForever}
                 </button>
               </>
@@ -1056,7 +1120,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 <button type="button" role="menuitem" className="mrow" onClick={() => void runRowAction(rowMenuEntry, 'unarchive')}>
                   <ArchiveRestore size={13} />{STR.unarchive}
                 </button>
-                <button type="button" role="menuitem" className="mrow" style={{ color: 'var(--nx-danger)' }} onClick={() => void runRowAction(rowMenuEntry, 'trash')}>
+                <button type="button" role="menuitem" className="mrow danger" onClick={() => void runRowAction(rowMenuEntry, 'trash')}>
                   <Trash2 size={13} />{STR.toTrash}
                 </button>
               </>
@@ -1065,7 +1129,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 <button type="button" role="menuitem" className="mrow" onClick={() => void runRowAction(rowMenuEntry, 'archive')}>
                   <Archive size={13} />{STR.archive}
                 </button>
-                <button type="button" role="menuitem" className="mrow" style={{ color: 'var(--nx-danger)' }} onClick={() => void runRowAction(rowMenuEntry, 'trash')}>
+                <button type="button" role="menuitem" className="mrow danger" onClick={() => void runRowAction(rowMenuEntry, 'trash')}>
                   <Trash2 size={13} />{STR.toTrash}
                 </button>
               </>
@@ -1102,8 +1166,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       )}
 
       {gate && (
-        <div className="nx-scrim" style={{ zIndex: 35 }}>
-          <div className="nx-dialog mini" role="dialog" aria-modal="true" aria-label={STR.gateUnlock}>
+        <TrappedDialog label={STR.gateUnlock} onClose={() => setGate(null)}>
             <h3>{gateEntry?.name || STR.gateUnlock}</h3>
             <div className="nx-field">
               <input
@@ -1127,24 +1190,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 {t('txt_cancel')} <span className="nx-kbd">esc</span>
               </button>
               <button type="button" className="nx-btn" disabled={gate.submitting} onClick={() => void submitGate()}>
-                {STR.gateUnlock} <span className="nx-kbd" style={{ borderColor: 'transparent', background: 'rgba(255,255,255,.2)', color: 'inherit' }}>↵</span>
+                {STR.gateUnlock} <span className="nx-kbd on-fill">↵</span>
               </button>
             </div>
-          </div>
-        </div>
+        </TrappedDialog>
       )}
 
       {confirm && (
-        <div className="nx-scrim" style={{ zIndex: 35 }}>
-          <div
-            className="nx-dialog mini"
-            role="alertdialog"
-            aria-modal="true"
-            aria-label={confirm.title}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && !confirmBusy) { e.preventDefault(); setConfirm(null); }
-            }}
-          >
+        <TrappedDialog label={confirm.title} alert onClose={confirmBusy ? undefined : () => setConfirm(null)}>
             <h3>{confirm.title}</h3>
             <div className="nx-help">{confirm.message}</div>
             <div className="dfoot">
@@ -1153,8 +1206,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               </button>
               <button
                 type="button"
-                className="nx-btn"
-                style={{ background: 'var(--nx-danger)' }}
+                className="nx-btn danger-fill"
                 disabled={confirmBusy}
                 onClick={() => {
                   setConfirmBusy(true);
@@ -1166,8 +1218,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 {confirm.confirmLabel}
               </button>
             </div>
-          </div>
-        </div>
+        </TrappedDialog>
       )}
 
       {toast && (
@@ -1177,7 +1228,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           {toast.seconds !== null && <span className="count">{STR.clearsIn(toast.seconds)}</span>}
         </div>
       )}
-      <div aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}>
+      <div aria-live="polite" className="nx-sr-only">
         {toast ? `${toast.text}${toast.seconds !== null ? `, clears in ${toast.seconds} seconds` : ''}` : ''}
       </div>
     </div>
