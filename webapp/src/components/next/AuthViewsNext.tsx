@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
 import { getCurrentNetworkStatus, subscribeNetworkStatus, type NetworkStatus } from '@/lib/network-status';
-import { MIN_MASTER_PASSWORD_LENGTH, registerPasswordIssue } from './auth-validation';
+import { registerPasswordIssue } from './auth-validation';
 import '../../styles/next/tokens.css';
 import '../../styles/next/auth.css';
 
