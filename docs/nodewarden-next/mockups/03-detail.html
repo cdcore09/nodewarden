@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next mockups — 03 item detail</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+</head>
+<body>
+
+<header class="mock-head">
+  <h1>03 · Item detail</h1>
+  <span class="crumb">slice 3 · journeys J1 (deep), J3</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+
+<!-- ───────────── STATE: detail side panel beside results ───────────── -->
+<section class="state">
+  <p class="state-label">⌘↵ on a result — detail panel slides in, results stay live (≥1100px)</p>
+  <div class="frame">
+    <div class="nw-next nx-split">
+      <div class="nx-shell">
+        <div class="nx-col">
+          <div class="nx-search is-focused"><span class="q">fas</span><span class="caret"></span></div>
+          <div class="nx-results">
+            <div class="nx-row is-active">
+              <span class="ico">◱</span>
+              <span class="main"><span class="title">Fastmail</span><span class="sub">cordero@fastmail.com</span></span>
+              <span class="meta"><span class="nx-badge org">org</span></span>
+            </div>
+            <div class="nx-row">
+              <span class="ico">◱</span>
+              <span class="main"><span class="title">Fastly CDN</span><span class="sub">ops@corderocore.com</span></span>
+            </div>
+            <div class="nx-hintbar">
+              <span class="nx-hint"><span class="nx-kbd">↵</span> copy password</span>
+              <span class="nx-hint"><span class="nx-kbd">⌘E</span> edit</span>
+              <span class="nx-hint"><span class="nx-kbd">esc</span> close detail</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside class="nx-detail">
+        <div class="dhead">
+          <span class="ico">◱</span>
+          <div>
+            <h2>Fastmail</h2>
+            <div class="sub">Personal · shared to <span class="nx-badge org" style="height:16px">Core Family</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="nx-kv">
+            <span class="nx-overline">Username</span>
+            <span class="val">cordero@fastmail.com
+              <span class="actions"><button class="nx-iconbtn" title="Copy">⧉</button></span>
+            </span>
+          </div>
+          <div class="nx-kv">
+            <span class="nx-overline">Password</span>
+            <span class="val"><span class="mask">••••••••••••••••</span>
+              <span class="actions"><button class="nx-iconbtn" title="Reveal">◉</button><button class="nx-iconbtn" title="Copy">⧉</button></span>
+            </span>
+          </div>
+          <div class="nx-kv">
+            <span class="nx-overline">One-time code</span>
+            <span class="val">381 442
+              <span class="nx-totp" style="margin-left:4px"><span class="ring" style="--ring:72%"></span><span>21s</span></span>
+              <span class="actions"><button class="nx-iconbtn" title="Copy">⧉</button></span>
+            </span>
+          </div>
+          <div class="nx-kv">
+            <span class="nx-overline">Website</span>
+            <span class="val">fastmail.com
+              <span class="actions"><button class="nx-iconbtn" title="Open">↗</button><button class="nx-iconbtn" title="Copy">⧉</button></span>
+            </span>
+          </div>
+          <div class="nx-kv" style="border-bottom:0">
+            <span class="nx-overline">Notes</span>
+            <span class="val" style="font-family:var(--nx-font-ui); color:var(--nx-ink-muted)">Recovery codes in safe.</span>
+          </div>
+        </div>
+        <div style="margin-top:auto; display:flex; gap:var(--nx-sp-2)">
+          <button class="nx-btn ghost">Edit <span class="nx-kbd" style="margin-left:2px">⌘E</span></button>
+          <button class="nx-btn ghost">Share <span class="nx-kbd" style="margin-left:2px">⌘S</span></button>
+          <button class="nx-btn ghost" style="margin-left:auto">⋯</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <p class="state-note">Detail never replaces retrieval — the palette column stays interactive; Esc closes the
+     panel, highlight preserved. Every credential is a labeled mono value with copy/reveal on the row (visible
+     on hover AND row focus — not hover-only). TOTP shows code + countdown, matching stock's live generation
+     but in system type. The accent chords (⌘U/⌘O/↵) still act on the open item. Below 1100px this panel is a
+     takeover with the same anatomy.</p>
+</section>
+
+<!-- ───────────── STATE: revealed password ───────────── -->
+<section class="state">
+  <p class="state-label">Password revealed — grouped mono, breach check on demand</p>
+  <div class="frame" style="max-width:460px; margin-left:0">
+    <div class="nw-next" style="padding:var(--nx-sp-6)">
+      <div class="nx-kv">
+        <span class="nx-overline">Password</span>
+        <span class="val">correct-horse-battery-staple
+          <span class="actions"><button class="nx-iconbtn" title="Hide">◎</button><button class="nx-iconbtn" title="Copy">⧉</button></span>
+        </span>
+        <span class="nx-help">Never checked against known breaches · <a href="#" style="color:var(--nx-accent)">check now</a></span>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Reveal is per-field and resets on item change (stock behavior kept). The HIBP check stays
+     explicit/on-demand (privacy posture), presented as quiet help text instead of a chunky button.</p>
+</section>
+
+</body>
+</html>

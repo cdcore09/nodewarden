@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next mockups — 02 retrieval surface</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+</head>
+<body>
+
+<header class="mock-head">
+  <h1>02 · Retrieval surface</h1>
+  <span class="crumb">slice 2 · journey J1 (the star), J2 entry, J6 empty state</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+
+<!-- ─────────────── STATE: query + results (the hero state) ─────────────── -->
+<section class="state">
+  <p class="state-label">Query “fas” — first result highlighted, Enter copies</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-appmenu">⋯</div>
+      <div class="nx-col">
+        <div class="nx-search is-focused"><span class="q">fas</span><span class="caret"></span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastmail</span><span class="sub">cordero@fastmail.com</span></span>
+            <span class="meta">
+              <span class="nx-totp"><span class="ring" style="--ring:72%"></span></span>
+              <span class="nx-badge org">org</span>
+            </span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastly CDN</span><span class="sub">ops@corderocore.com</span></span>
+            <span class="meta"></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">◲</span>
+            <span class="main"><span class="title">FastSpring</span><span class="sub">billing · Visa ····4242</span></span>
+            <span class="meta"><span class="nx-badge">card</span></span>
+          </div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">↵</span> copy password</span>
+            <span class="nx-hint"><span class="nx-kbd">⌘↵</span> open</span>
+            <span class="nx-hint"><span class="nx-kbd">⌘U</span> username</span>
+            <span class="nx-hint"><span class="nx-kbd">⌘O</span> code</span>
+            <span class="grow"></span>
+            <span class="nx-hint"><span class="nx-kbd">⇥</span> actions</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">The whole product in one screen: 19px query, 44px rows, one accent spent on the active
+     rail + wash. Username in mono under the title; TOTP presence = live countdown ring; org membership = quiet
+     badge. Hint bar teaches the key map passively. No sidebar, no toolbar, no filters visible — search is global.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: copied ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">After Enter — copied flash + auto-clear countdown</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search is-focused"><span class="q">fas</span><span class="caret"></span></div>
+        <div class="nx-results">
+          <div class="nx-row is-copied">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastmail</span><span class="sub">cordero@fastmail.com</span></span>
+            <span class="meta"><span class="nx-badge ok">copied</span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastly CDN</span><span class="sub">ops@corderocore.com</span></span>
+          </div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">⌘U</span> username</span>
+            <span class="nx-hint"><span class="nx-kbd">⌘O</span> code</span>
+            <span class="grow"></span>
+            <span class="nx-hint"><span class="nx-kbd">⇥</span> actions</span>
+          </div>
+        </div>
+      </div>
+      <div class="nx-toast"><span class="dot"></span> Password copied <span class="count">· clears in 28s</span></div>
+    </div>
+  </div>
+  <p class="state-note">The one expressive moment in the system: row flashes ok-soft, badge confirms, toast
+     carries the clipboard auto-clear countdown (new capability — stock never clears, `lib/clipboard.ts`).
+     Hint bar becomes contextual: the follow-up copies (⌘U, ⌘O) lead. Highlight hasn't moved — the item stays
+     selected for the next keystroke.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: command mode ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Command mode — “&gt;” prefix</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search is-focused"><span class="cmd-sigil">&gt;</span><span class="q">au</span><span class="caret"></span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">⌾</span>
+            <span class="main"><span class="title">Security audit</span><span class="sub" style="font-family:var(--nx-font-ui)">scan passwords for weak · reused · breached</span></span>
+            <span class="meta"><span class="nx-kbd">↵</span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">＋</span>
+            <span class="main"><span class="title">New card</span><span class="sub" style="font-family:var(--nx-font-ui)">create a card item</span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">⇄</span>
+            <span class="main"><span class="title">Classic UI</span><span class="sub" style="font-family:var(--nx-font-ui)">switch to the stock interface</span></span>
+          </div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">↵</span> run</span>
+            <span class="nx-hint"><span class="nx-kbd">esc</span> back to search</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Everything that isn't retrieval lives here: new items, audit, generator, settings,
+     import, admin/org jumps (into stock UI), lock, classic-UI escape hatch. The accent-colored sigil signals
+     the mode; command rows describe themselves in UI type, not mono.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: no match → create ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">No match — create-from-query (J2 entry)</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search is-focused"><span class="q">tailscale</span><span class="caret"></span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">＋</span>
+            <span class="main"><span class="title">Create login “tailscale”</span></span>
+            <span class="meta"><span class="nx-kbd">↵</span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">＋</span>
+            <span class="main"><span class="title">Create note “tailscale”</span></span>
+          </div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">↵</span> create</span>
+            <span class="nx-hint"><span class="nx-kbd">esc</span> clear</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Every failed retrieval converts into capture: Enter opens the editor (04) with the name
+     prefilled. Login leads; the other 7 types are one row down or in command mode.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: reprompt inline ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Reprompt-gated item — inline master-password gate</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search"><span class="q">bank</span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">◳</span>
+            <span class="main"><span class="title">Chase Bank</span><span class="sub">cordero.core</span></span>
+            <span class="meta"><span class="nx-badge warn">locked</span></span>
+          </div>
+          <div style="margin-top:var(--nx-sp-3); display:flex; gap:var(--nx-sp-2); align-items:center">
+            <div class="nx-input password-input is-focused" style="flex:1"><span class="mask">••••••</span><span class="caret" style="height:16px"></span></div>
+            <button class="nx-btn ghost">Unlock item</button>
+          </div>
+          <div class="nx-help" style="margin-top:6px">This item asks for your master password before copy or reveal.</div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">↵</span> unlock, then copy</span>
+            <span class="nx-hint"><span class="nx-kbd">esc</span> cancel</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">No dialog navigation: the gate renders in the flow where the hint bar sits, field
+     focused, Enter submits then completes the original action. Costs exactly P+1 keystrokes (J1 criterion).</p>
+</section>
+
+<!-- ─────────────────────────── STATE: scoped browse ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Browsing — scope chip active, empty query lists the scope</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search is-focused"><span class="nx-chip">folder: Work ✕</span><span class="caret"></span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">AWS Console</span><span class="sub">cordero+aws@corderocore.com</span></span>
+            <span class="meta"><span class="nx-totp"><span class="ring" style="--ring:35%"></span></span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Cloudflare</span><span class="sub">ops@corderocore.com</span></span>
+            <span class="meta"><span class="nx-badge org">org</span></span>
+          </div>
+          <div class="nx-row">
+            <span class="ico">⌗</span>
+            <span class="main"><span class="title">Deploy runbook</span><span class="sub" style="font-family:var(--nx-font-ui)">secure note</span></span>
+          </div>
+          <div class="nx-hintbar">
+            <span class="nx-hint"><span class="nx-kbd">⌫</span> remove scope</span>
+            <span class="nx-hint"><span class="nx-kbd">⌘B</span> browse</span>
+            <span class="grow"></span>
+            <span class="nx-hint">3 items in Work</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Browsing = an explicit chip + the same list. The chip is impossible to miss — the fix
+     for stock's silent filter-scoped search (`VaultPage.tsx:404-430`). Backspace at query start removes it;
+     ⌘B opens the chip picker (folders, types, orgs, favorites, archive, trash).</p>
+</section>
+
+<!-- ─────────────────────────── STATE: action menu ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Tab — action menu on the highlighted item (the long tail)</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search"><span class="q">fas</span></div>
+        <div class="nx-results">
+          <div class="nx-row is-active">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastmail</span><span class="sub">cordero@fastmail.com</span></span>
+            <span class="meta"><span class="nx-badge org">org</span></span>
+          </div>
+          <div class="nx-row" style="opacity:.4">
+            <span class="ico">◱</span>
+            <span class="main"><span class="title">Fastly CDN</span><span class="sub">ops@corderocore.com</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="nx-menu" style="right:120px; top:150px">
+        <div class="mrow is-active">Open fastmail.com <span class="k nx-kbd">↵</span></div>
+        <div class="mrow">Copy URI</div>
+        <div class="mrow">Edit <span class="k nx-kbd">⌘E</span></div>
+        <div class="mrow">Share to organization… <span class="k nx-kbd">⌘S</span></div>
+        <div class="mrow">Move to folder…</div>
+        <div class="mrow">Archive</div>
+        <div class="mrow" style="color:var(--nx-danger)">Delete…</div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">One list idiom everywhere: the menu rows behave exactly like result rows (arrows,
+     Enter, typeahead). Everything not worth a dedicated chord lives here.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: first-run empty ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">First-run empty vault (J6) — two paths, no tour</p>
+  <div class="frame">
+    <div class="nw-next nx-shell">
+      <div class="nx-col">
+        <div class="nx-search"><span class="q"><span class="ghost">Search your vault</span></span></div>
+        <div class="nx-empty">
+          <div>Your vault is empty.</div>
+          <div class="ctas">
+            <button class="nx-btn primary">Create your first login</button>
+            <button class="nx-btn ghost">Import from another manager</button>
+          </div>
+        </div>
+        <div class="nx-hintbar">
+          <span class="grow"></span>
+          <span class="nx-hint"><span class="nx-kbd">⌘K</span> gets you here from anywhere</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Replaces stock's dead-end “No items” (`VaultListPanel.tsx:441`). Create → editor (04);
+     Import → stock import surface. The ⌘K hint appears once, dismissible.</p>
+</section>
+
+</body>
+</html>

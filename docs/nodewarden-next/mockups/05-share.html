@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next mockups — 05 share dialog</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+</head>
+<body>
+
+<header class="mock-head">
+  <h1>05 · Share to organization</h1>
+  <span class="crumb">slice 3.5 · journey J4 — calm and correct beats fast</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+
+<!-- ───────────── STATE: dialog, loaded ───────────── -->
+<section class="state">
+  <p class="state-label">⌘S — one visual language, Enter confirms</p>
+  <div class="frame">
+    <div class="nw-next" style="min-height:560px; position:relative">
+      <div class="nx-shell" style="opacity:.4">
+        <div class="nx-col">
+          <div class="nx-search"><span class="q">fas</span></div>
+          <div class="nx-results">
+            <div class="nx-row is-active">
+              <span class="ico">◱</span>
+              <span class="main"><span class="title">Fastmail</span><span class="sub">cordero@fastmail.com</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="nx-scrim">
+        <div class="nx-dialog">
+          <h3>Share “Fastmail”</h3>
+          <div class="nx-field">
+            <span class="nx-overline">Organization</span>
+            <div class="nx-select is-focused">Core Family <span class="chev">▾</span></div>
+          </div>
+          <div class="nx-field">
+            <span class="nx-overline">Collections</span>
+            <div class="nx-option-list">
+              <div class="nx-option"><span class="nx-check on">✓</span> Shared logins</div>
+              <div class="nx-option"><span class="nx-check"></span> Streaming</div>
+              <div class="nx-option"><span class="nx-check"></span> Kids</div>
+            </div>
+            <span class="nx-help">The item is re-encrypted for the organization. Ownership moves; this can't be undone from here.</span>
+          </div>
+          <div class="foot">
+            <button class="nx-btn ghost">Cancel <span class="nx-kbd" style="margin-left:2px">esc</span></button>
+            <button class="nx-btn primary">Share <span class="nx-kbd" style="margin-left:2px; border-color:transparent; background:rgba(255,255,255,.2); color:inherit">↵</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">The issue's design-system evidence, answered: styled select + the one multi-select idiom
+     (checkbox option list) — zero native popover chrome. Focus lands on the org select (stock ConfirmDialog's
+     good behavior, kept). Single-collection orgs arrive pre-checked. The consequence line states what sharing
+     actually does — a vault should say so.</p>
+</section>
+
+<!-- ───────────── STATE: loading + org-switch notice ───────────── -->
+<section class="state">
+  <p class="state-label">Dialog paints instantly; org switch announces the reset</p>
+  <div class="frame" style="max-width:480px; margin-left:0">
+    <div class="nw-next" style="padding:var(--nx-sp-6); display:flex; flex-direction:column; gap:var(--nx-sp-5)">
+      <div class="nx-dialog" style="width:auto; box-shadow:none">
+        <h3>Share “Fastmail”</h3>
+        <div class="nx-field">
+          <span class="nx-overline">Organization</span>
+          <div class="nx-select">Core Family <span class="chev">▾</span></div>
+        </div>
+        <div class="nx-field">
+          <span class="nx-overline">Collections</span>
+          <div class="nx-working"></div>
+          <span class="nx-help">Loading collections…</span>
+        </div>
+      </div>
+      <div class="nx-dialog" style="width:auto; box-shadow:none">
+        <div class="nx-field">
+          <span class="nx-overline">Collections</span>
+          <span class="nx-help" style="color:var(--nx-warn)">Switched to “Homestead LLC” — collection choice reset.</span>
+          <div class="nx-option-list">
+            <div class="nx-option"><span class="nx-check"></span> Operations</div>
+            <div class="nx-option"><span class="nx-check"></span> Finance</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Fixes the two perceptual failures traced in J4: the dialog opens before the network
+     answers (`openShareDialog` currently awaits first), and an org switch says what it did instead of silently
+     wiping the selection (`VaultPage.tsx:1445-1449`).</p>
+</section>
+
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next mockups — 01 unlock</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+</head>
+<body>
+
+<header class="mock-head">
+  <h1>01 · Unlock</h1>
+  <span class="crumb">slice 1 · journeys J1 entry, J6</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+
+<!-- ─────────────────────────── STATE: default ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Unlock — default (password focused, Enter submits)</p>
+  <div class="frame">
+    <div class="nw-next nx-unlock">
+      <div class="box">
+        <div class="nx-wordmark"><span class="mark">N</span> NodeWarden</div>
+        <div>
+          <h1>Unlock</h1>
+          <div class="who">cordero@corderocore.com</div>
+        </div>
+        <div class="nx-field">
+          <div class="nx-input password-input is-focused"><span class="mask">••••••••••••</span><span class="caret" style="height:18px"></span></div>
+        </div>
+        <div class="nx-alt">
+          <a href="#">Unlock with passkey</a>
+          <a href="#">Password hint</a>
+          <a href="#" style="margin-left:auto">Log out</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">No card chrome, no button — the field is the surface; Enter is the action. Email in mono
+     (it's data). Passkey/hint/logout are quiet text links: present, never competing. The stock screen's strengths
+     (autofocus, Enter submit) are kept; its dead button-label wait is replaced below.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: working ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Unlock — working (KDF + sync)</p>
+  <div class="frame">
+    <div class="nw-next nx-unlock">
+      <div class="box">
+        <div class="nx-wordmark"><span class="mark">N</span> NodeWarden</div>
+        <div>
+          <h1>Unlock</h1>
+          <div class="who">cordero@corderocore.com</div>
+        </div>
+        <div class="nx-field">
+          <div class="nx-input password-input" style="opacity:.55"><span class="mask">••••••••••••</span></div>
+          <div class="nx-working" aria-hidden="true"></div>
+          <div class="nx-help">Deriving key…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">The 600k-iteration PBKDF2 + network wait gets an honest working bar and a stage label
+     (“Deriving key…” → “Syncing vault…”). Calm, no spinner theatrics. Field dims and locks during work.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: error ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Unlock — wrong password (field cleared, refocused, message inline)</p>
+  <div class="frame">
+    <div class="nw-next nx-unlock">
+      <div class="box">
+        <div class="nx-wordmark"><span class="mark">N</span> NodeWarden</div>
+        <div>
+          <h1>Unlock</h1>
+          <div class="who">cordero@corderocore.com</div>
+        </div>
+        <div class="nx-field">
+          <div class="nx-input password-input is-error is-focused"><span class="caret" style="height:18px"></span></div>
+          <div class="nx-error">Master password is incorrect.</div>
+        </div>
+        <div class="nx-alt">
+          <a href="#">Unlock with passkey</a>
+          <a href="#">Password hint</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Fixes the stock toast-only failure (`App.tsx:968`): inline error, field cleared and
+     refocused — retype immediately, no mouse, no dismissing anything.</p>
+</section>
+
+<!-- ─────────────────────────── STATE: register ─────────────────────────── -->
+<section class="state">
+  <p class="state-label">Register — inline as-you-type validation (J6)</p>
+  <div class="frame">
+    <div class="nw-next nx-unlock" style="min-height:640px">
+      <div class="box">
+        <div class="nx-wordmark"><span class="mark">N</span> NodeWarden</div>
+        <h1>Create account</h1>
+        <div class="nx-field">
+          <span class="nx-overline">Name</span>
+          <div class="nx-input">Cordero Core</div>
+        </div>
+        <div class="nx-field">
+          <span class="nx-overline">Email</span>
+          <div class="nx-input data">cordero@corderocore.com</div>
+        </div>
+        <div class="nx-field">
+          <span class="nx-overline">Master password</span>
+          <div class="nx-input password-input is-focused"><span class="mask">••••••••••</span><span class="caret" style="height:18px"></span></div>
+          <div class="nx-help">10 of 12 characters minimum</div>
+        </div>
+        <div class="nx-field">
+          <span class="nx-overline">Confirm master password</span>
+          <div class="nx-input password-input"><span class="ghost">repeat it exactly</span></div>
+        </div>
+        <button class="nx-btn primary">Create account</button>
+        <div class="nx-alt"><a href="#">Back to log in</a></div>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">First field autofocused (stock has none), the 12-char rule counts down live instead of
+     failing as a toast at submit (`App.tsx:850`). On success: straight into the unlocked empty vault (02, last
+     state) — no re-login. Password hint field omitted from the default path (progressive disclosure; available
+     under “Add a hint” link — decision to review).</p>
+</section>
+
+</body>
+</html>

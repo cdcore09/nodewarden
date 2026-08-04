@@ -138,7 +138,7 @@ Same accelerators as above act on the open item (`⌘U`, `⌘O`, `⌘E`, `⌘S`,
 | Key | Action | Journey |
 |---|---|---|
 | (on open) | First relevant field autofocused; complete Tab order name → username → password → TOTP → URIs → rest | J2, J3 |
-| `⌘G` | **G**enerate password into the password field; press again to reroll. Field is masked with reveal toggle. | J2, J5 |
+| `⌘G` | **G**enerate password into the password field; press again to reroll. Field is masked with reveal toggle. A ⚙ disclosure on the generator well exposes the rules row (words/characters, length, character classes) for sites with restrictive password requirements — any rule change rerolls immediately; rules persist per session. | J2, J5 |
 | `⌘Enter` (alias `⌘S`) | Save. On save: return to where you came from (results with highlight, or audit findings list) with the saved item selected. | J2, J3, J5 |
 | `Esc` | Cancel; if dirty, an inline guard (Enter = discard, Esc = keep editing) | J3 |
 
