@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD_GROUPS } from '../webapp/src/components/next/editor-fields';
-import { createEmptyDraft } from '../webapp/src/components/vault/vault-page-helpers';
+
+// vault-page-helpers depends on Vite-injected globals; provide them before import.
+(globalThis as any).__NODEWARDEN_DEMO__ = false;
+const { createEmptyDraft } = await import('../webapp/src/components/vault/vault-page-helpers');
 
 test('every field group key exists on the corresponding empty draft', () => {
   for (const [type, fields] of Object.entries(FIELD_GROUPS)) {
