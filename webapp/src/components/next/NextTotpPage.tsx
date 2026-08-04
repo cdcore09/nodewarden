@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { calcTotpNow, type TotpCodeResult } from '@/lib/crypto';
 import { TypeIcon } from '@/components/vault/vault-page-helpers';
+import WebsiteIcon from '@/components/vault/WebsiteIcon';
 import type { SearchEntry } from '@/lib/next/search';
 import type { Cipher } from '@/lib/types';
 
@@ -42,34 +43,42 @@ export default function NextTotpPage(props: NextTotpPageProps) {
   return (
     <div className="nx-list" role="list">
       {totpEntries.length === 0 && <div className="nx-empty">{STR.empty}</div>}
-      {totpEntries.map((entry) => {
-        const live = codes.get(entry.id);
-        return (
-          <div
-            key={entry.id}
-            role="listitem"
-            className={`nx-row${entry.id === props.copiedId ? ' is-copied' : ''}`}
-            onClick={() => live && props.onCopyValue(live.code, 'Code', entry.id)}
-            title={STR.copy}
-          >
-            <span className="ico"><TypeIcon type={entry.type} /></span>
-            <span className="main">
-              <span className="title">{entry.name}</span>
-              <span className="sub">{entry.sub}</span>
-            </span>
-            <span className="meta">
-              {entry.id === props.copiedId && <span className="nx-badge ok">✓</span>}
+      <div className="totp-grid">
+        {totpEntries.map((entry) => {
+          const live = codes.get(entry.id);
+          const cipher = props.cipherById.get(entry.id);
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              role="listitem"
+              className={`totp-card${entry.id === props.copiedId ? ' is-copied' : ''}`}
+              onClick={() => live && props.onCopyValue(live.code, 'Code', entry.id)}
+              title={STR.copy}
+            >
+              <span className="card-id">
+                <span className="ico">
+                  {cipher
+                    ? <WebsiteIcon cipher={cipher} fallback={<TypeIcon type={entry.type} />} />
+                    : <TypeIcon type={entry.type} />}
+                </span>
+                <span className="who">
+                  <span className="title">{entry.name}</span>
+                  <span className="sub">{entry.sub}</span>
+                </span>
+                {entry.id === props.copiedId && <span className="nx-badge ok">✓</span>}
+              </span>
               {live && (
-                <span className="nx-totp" style={{ fontSize: 'var(--nx-text-lg)' }}>
-                  <span style={{ letterSpacing: '0.08em' }}>{live.code}</span>
+                <span className="card-code nx-totp">
+                  <span className="code nx-data">{live.code}</span>
                   <span className="ring" style={{ '--ring': `${Math.round((live.remain / live.period) * 100)}%` }} />
-                  <span style={{ fontSize: 'var(--nx-text-sm)' }}>{live.remain}s</span>
+                  <span className="secs">{live.remain}s</span>
                 </span>
               )}
-            </span>
-          </div>
-        );
-      })}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

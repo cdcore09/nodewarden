@@ -109,8 +109,9 @@ export default function NextSendsPage(props: NextSendsPageProps) {
         />
       </div>
 
+      <div className={`sends-grid${draft ? ' has-editor' : ''}`}>
       {draft && (
-        <div className="nx-editor" style={{ border: '1px solid var(--nx-line)', borderRadius: 'var(--nx-radius-lg)', padding: 'var(--nx-sp-4)', marginBottom: 'var(--nx-sp-4)' }}
+        <div className="nx-editor sends-editor"
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void save(); }
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(null); setEditing(null); }
@@ -158,6 +159,7 @@ export default function NextSendsPage(props: NextSendsPageProps) {
         </div>
       )}
 
+      <div className="sends-list">
       {!props.loading && props.sends.length === 0 && !draft && <div className="nx-empty">{STR.empty}</div>}
 
       {props.sends.map((send) => (
@@ -196,6 +198,8 @@ export default function NextSendsPage(props: NextSendsPageProps) {
           </span>
         </div>
       ))}
+      </div>
+      </div>
     </div>
   );
 }

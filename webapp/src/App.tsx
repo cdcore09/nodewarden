@@ -141,6 +141,7 @@ const APP_ROUTE_PATHS = [
   '/next/generator',
   '/next/sends',
   '/next/settings',
+  '/next/import',
   ...IMPORT_ROUTE_PATHS,
 ] as const;
 const AUTH_ROUTES: ReadonlySet<string> = new Set(AUTH_ROUTE_PATHS);
@@ -2563,6 +2564,7 @@ export default function App() {
           onLock={handleLock}
           onLogout={logoutNow}
           onNotify={pushToast}
+          onImport={effectiveMainRoutesProps.onImport}
         />
         {renderPassiveOverlays()}
       </>

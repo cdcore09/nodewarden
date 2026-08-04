@@ -49,7 +49,7 @@ export function listCommands(): NextCommand[] {
     { id: 'verification-codes', label: 'Verification codes', hint: 'all TOTP codes', run: (ctx) => ctx.navigate('/next/totp') },
     { id: 'sends', label: 'Sends', run: (ctx) => ctx.navigate('/next/sends') },
     { id: 'organizations', label: 'Organizations', run: (ctx) => ctx.navigate('/organizations') },
-    { id: 'import', label: 'Import', hint: 'from another password manager', run: (ctx) => ctx.navigate('/import') },
+    { id: 'import', label: 'Import', hint: 'from another password manager', run: (ctx) => ctx.navigate('/next/import') },
     { id: 'backup', label: 'Backup center', run: (ctx) => ctx.navigate('/backup') },
     { id: 'settings', label: 'Settings', run: (ctx) => ctx.navigate('/next/settings') },
     { id: 'devices', label: 'Device management', run: (ctx) => ctx.navigate('/settings/security/device-management') },

@@ -335,7 +335,7 @@
 .nx-sheet .sheet-row .sep { color: var(--nx-ink-faint); }
 .nx-sheet .sheet-row .lbl { color: var(--nx-ink-muted); }
 
-.nx-settings { display: flex; flex-direction: column; gap: var(--nx-sp-6); max-width: 640px; }
+.nx-settings { display: flex; flex-direction: column; gap: var(--nx-sp-6); max-width: 1160px; }
 .nx-settings .set-section { display: flex; flex-direction: column; gap: var(--nx-sp-2); }
 .nx-settings .set-row {
   display: flex;
@@ -364,7 +364,7 @@
 }
 .nx-settings .set-link:hover { color: var(--nx-accent); }
 
-.nx-genpage { display: flex; flex-direction: column; gap: var(--nx-sp-4); max-width: 640px; }
+.nx-genpage { display: flex; flex-direction: column; gap: var(--nx-sp-4); max-width: 1160px; }
 .nx-genpage .gen-candidate {
   font-size: var(--nx-text-2xl);
   line-height: 1.3;
@@ -373,7 +373,13 @@
   border: 1px dashed var(--nx-accent-line);
   border-radius: var(--nx-radius-lg);
   background: var(--nx-inset);
+  color: var(--nx-ink);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--nx-dur-1) var(--nx-ease), background var(--nx-dur-1) var(--nx-ease);
 }
+.nx-genpage .gen-candidate:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
 .nx-menu .mrow .k { margin-left: auto; }
 
 /* ── slice 6: design-audit utilities (replace inline styles) ── */
@@ -462,4 +468,237 @@ details.nx-details > .details-body {
   flex-direction: column;
   gap: var(--nx-sp-4);
   padding-top: var(--nx-sp-3);
+}
+
+/* ── slice 7: full-width tool pages ─────────────────────────────────────────
+   Tools and Settings stop being 640px single columns: cards, stat tiles and
+   side rails fill the shell at desktop widths and collapse back to one
+   column under 1100px. Everything is token-only. */
+
+/* settings: sections become cards in a responsive grid */
+.nx-settings .set-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--nx-sp-4);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .nx-settings .set-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.nx-settings .set-card {
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-5);
+  box-shadow: var(--nx-shadow-1);
+}
+.nx-settings .set-card-wide { grid-column: 1 / -1; }
+/* inside a card the side-by-side row squeezes help copy into a sliver —
+   stack label over control instead */
+.nx-settings .set-card .set-row { flex-direction: column; align-items: stretch; gap: var(--nx-sp-2); }
+.nx-settings .set-card .set-control .nx-input { width: 100%; min-width: 0; }
+.nx-settings .set-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  column-gap: var(--nx-sp-6);
+}
+
+/* generator: main flow + session-history rail */
+.gen-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nx-sp-6); align-items: start; }
+.gen-main { display: flex; flex-direction: column; gap: var(--nx-sp-4); min-width: 0; }
+.gen-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-2);
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  box-shadow: var(--nx-shadow-1);
+}
+.gen-hist {
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-muted);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--nx-line-soft);
+  padding: var(--nx-sp-2) 0;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gen-hist:last-child { border-bottom: 0; }
+.gen-hist:hover { color: var(--nx-accent); }
+@media (min-width: 1100px) {
+  .gen-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+
+/* verification codes: live cards instead of rows */
+.totp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--nx-sp-3);
+}
+.totp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-3);
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  box-shadow: var(--nx-shadow-1);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--nx-ink);
+  transition: border-color var(--nx-dur-1) var(--nx-ease);
+}
+.totp-card:hover { border-color: var(--nx-accent-line); }
+.totp-card.is-copied { border-color: var(--nx-ok); background: var(--nx-ok-soft); }
+.totp-card .card-id { display: flex; align-items: center; gap: var(--nx-sp-2); min-width: 0; }
+.totp-card .card-id .ico {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--nx-radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--nx-inset);
+  border: 1px solid var(--nx-line-soft);
+  color: var(--nx-ink-muted);
+}
+.totp-card .card-id .who { display: flex; flex-direction: column; min-width: 0; }
+.totp-card .card-id .title {
+  font-weight: var(--nx-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.totp-card .card-id .sub {
+  font-size: var(--nx-text-sm);
+  color: var(--nx-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.totp-card .card-code { display: flex; align-items: center; gap: var(--nx-sp-3); }
+.totp-card .card-code .code { font-size: var(--nx-text-2xl); letter-spacing: 0.1em; color: var(--nx-ink); }
+.totp-card .card-code .ring { width: 18px; height: 18px; }
+.totp-card .card-code .secs { font-size: var(--nx-text-sm); color: var(--nx-ink-faint); margin-left: auto; }
+
+/* audit: stat tiles double as the finding filters */
+.audit-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--nx-sp-3);
+  max-width: 760px;
+  margin-bottom: var(--nx-sp-5);
+}
+.audit-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  box-shadow: var(--nx-shadow-1);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--nx-ink);
+  transition: border-color var(--nx-dur-1) var(--nx-ease);
+}
+.audit-stat:hover { border-color: var(--nx-accent-line); }
+.audit-stat.on { border-color: var(--nx-accent); }
+.audit-stat .n { font-size: var(--nx-text-2xl); font-weight: var(--nx-weight-semibold); line-height: var(--nx-leading-tight); }
+.audit-stat .l { font-size: var(--nx-text-sm); color: var(--nx-ink-muted); }
+.audit-stat.danger .n { color: var(--nx-danger); }
+.audit-stat.warn .n { color: var(--nx-warn); }
+
+/* sends: editor docks as a right panel when open */
+.sends-grid { display: block; }
+.sends-list { min-width: 0; }
+.sends-editor {
+  border: 1px solid var(--nx-line);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  background: var(--nx-surface);
+  box-shadow: var(--nx-shadow-1);
+  margin-bottom: var(--nx-sp-4);
+}
+@media (min-width: 1100px) {
+  .sends-grid.has-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: var(--nx-sp-6);
+    align-items: start;
+  }
+  .sends-grid.has-editor .sends-list { grid-column: 1; grid-row: 1; }
+  .sends-grid.has-editor .sends-editor { grid-column: 2; grid-row: 1; margin-bottom: 0; position: sticky; top: var(--nx-sp-4); }
+}
+
+/* import: drop-first flow with a hand-off rail */
+.nx-import { max-width: 1160px; }
+.nx-import .import-intro { max-width: 64ch; margin-bottom: var(--nx-sp-4); }
+.import-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nx-sp-6); align-items: start; }
+.import-main { display: flex; flex-direction: column; gap: var(--nx-sp-4); min-width: 0; }
+.import-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nx-sp-2);
+  padding: var(--nx-sp-12) var(--nx-sp-4);
+  border: 1.5px dashed var(--nx-line);
+  border-radius: var(--nx-radius-lg);
+  background: var(--nx-inset);
+  color: var(--nx-ink-muted);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color var(--nx-dur-1) var(--nx-ease), background var(--nx-dur-1) var(--nx-ease);
+}
+.import-drop:hover, .import-drop.is-over { border-color: var(--nx-accent); background: var(--nx-accent-soft); color: var(--nx-ink); }
+.import-drop.has-file { border-style: solid; border-color: var(--nx-accent-line); color: var(--nx-ink); }
+.import-drop .drop-title { font-size: var(--nx-text-md); font-weight: var(--nx-weight-medium); color: var(--nx-ink); }
+.import-drop .drop-hint { font-size: var(--nx-text-sm); color: var(--nx-ink-faint); }
+.import-drop .drop-file { font-size: var(--nx-text-sm); }
+.import-paste { min-height: 160px; }
+.import-folders { display: flex; align-items: center; gap: var(--nx-sp-2); flex-wrap: wrap; }
+.import-folders .nx-input { width: auto; height: 34px; }
+.import-aside .aside-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-2);
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-4);
+  box-shadow: var(--nx-shadow-1);
+}
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-sp-4);
+  background: var(--nx-surface);
+  border: 1px solid var(--nx-line-soft);
+  border-radius: var(--nx-radius-lg);
+  padding: var(--nx-sp-5);
+  box-shadow: var(--nx-shadow-1);
+}
+.import-summary .sum-head { display: flex; align-items: center; gap: var(--nx-sp-2); color: var(--nx-ok); }
+.import-summary .sum-title { font-size: var(--nx-text-lg); font-weight: var(--nx-weight-semibold); color: var(--nx-ink); }
+.import-summary .sum-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--nx-sp-3);
+}
+.import-summary .sum-stat { display: flex; flex-direction: column; gap: 2px; }
+.import-summary .sum-stat .n { font-size: var(--nx-text-2xl); font-weight: var(--nx-weight-semibold); line-height: var(--nx-leading-tight); }
+.import-summary .sum-stat .l { font-size: var(--nx-text-sm); color: var(--nx-ink-muted); }
+.import-summary .sum-actions { display: flex; gap: var(--nx-sp-2); }
+@media (min-width: 1100px) {
+  .import-grid { grid-template-columns: minmax(0, 1fr) 320px; }
 }

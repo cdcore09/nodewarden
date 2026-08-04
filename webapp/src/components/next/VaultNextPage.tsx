@@ -16,6 +16,9 @@ import NextTotpPage from './NextTotpPage';
 import NextGeneratorPage from './NextGeneratorPage';
 import NextSendsPage from './NextSendsPage';
 import NextSettingsPage from './NextSettingsPage';
+import NextImportPage from './NextImportPage';
+import type { CiphersImportPayload } from '@/lib/api/vault';
+import type { ImportResultSummary } from '@/components/ImportPage';
 import ShortcutSheet from './ShortcutSheet';
 import { useDialogFocus } from './useDialogFocus';
 import type { Send, SendDraft } from '@/lib/types';
@@ -118,6 +121,10 @@ interface VaultNextPageProps {
   onLock: () => void;
   onLogout: () => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
+  onImport: (
+    payload: CiphersImportPayload,
+    options: { folderMode: 'original' | 'none' | 'target'; targetFolderId: string | null }
+  ) => Promise<ImportResultSummary>;
 }
 
 type CopyKind = PaletteCopyKind;
@@ -187,7 +194,7 @@ function scopeTitle(scope: ScopeFilter): string {
   }
 }
 
-type NextPage = 'vault' | 'audit' | 'totp' | 'generator' | 'sends' | 'settings';
+type NextPage = 'vault' | 'audit' | 'totp' | 'generator' | 'sends' | 'settings' | 'import';
 
 const PAGE_TITLES: Record<NextPage, string> = {
   vault: '',
@@ -196,6 +203,7 @@ const PAGE_TITLES: Record<NextPage, string> = {
   generator: 'Generator',
   sends: 'Sends',
   settings: 'Settings',
+  import: 'Import',
 };
 
 function pageFromLocation(location: string): NextPage {
@@ -204,6 +212,7 @@ function pageFromLocation(location: string): NextPage {
   if (location === '/next/generator') return 'generator';
   if (location === '/next/sends') return 'sends';
   if (location === '/next/settings') return 'settings';
+  if (location === '/next/import') return 'import';
   return 'vault';
 }
 
@@ -773,7 +782,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           <button type="button" className={`rail-link${page === 'audit' ? ' on' : ''}`} onClick={() => navigate('/next/audit')}>
             <ShieldCheck size={14} />{STR.audit}
           </button>
-          <button type="button" className="rail-link" onClick={() => navigate('/import')}>
+          <button type="button" className={`rail-link${page === 'import' ? ' on' : ''}`} onClick={() => navigate('/next/import')}>
             <ExternalLink size={14} />{t('txt_import')}
           </button>
         </div>
@@ -920,6 +929,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             onNotify={props.onNotify}
           />
         )}
+        {page === 'import' && (
+          <NextImportPage
+            folders={props.folders}
+            onImport={props.onImport}
+            onNotify={props.onNotify}
+            navigate={navigate}
+          />
+        )}
         {page === 'settings' && (
           <NextSettingsPage
             themePreference={props.themePreference}
@@ -947,7 +964,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               <div>{STR.emptyVault}</div>
               <div className="ctas">
                 <button type="button" className="nx-btn" onClick={() => startCreate(1)}>{STR.createFirst}</button>
-                <button type="button" className="nx-btn ghost" onClick={() => navigate('/import')}>{t('txt_import')}</button>
+                <button type="button" className="nx-btn ghost" onClick={() => navigate('/next/import')}>{t('txt_import')}</button>
               </div>
             </div>
           )}
@@ -1220,6 +1237,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             </div>
         </TrappedDialog>
       )}
+
+      {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
 
       {toast && (
         <div className="nx-toast" style={{ position: 'fixed' }} role="status">
