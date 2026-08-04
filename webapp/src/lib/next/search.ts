@@ -17,7 +17,22 @@ export interface SearchEntry {
   organizationId: string | null;
   reprompt: boolean;
   hasTotp: boolean;
+  revisionDate: number;
+  creationDate: number;
   haystack: string[];
+}
+
+export type SortMode = 'name' | 'edited' | 'created';
+
+export function sortEntries(entries: SearchEntry[], mode: SortMode): SearchEntry[] {
+  const sorted = entries.slice();
+  if (mode === 'name') {
+    sorted.sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    const key = mode === 'edited' ? 'revisionDate' : 'creationDate';
+    sorted.sort((a, b) => (b[key] || 0) - (a[key] || 0) || a.name.localeCompare(b.name));
+  }
+  return sorted;
 }
 
 export type ScopeFilter =
@@ -73,6 +88,8 @@ export function buildSearchEntries(ciphers: Cipher[], folders: Folder[]): Search
       organizationId: cipher.organizationId || null,
       reprompt: cipher.reprompt === 1,
       hasTotp: !!cipher.login?.decTotp,
+      revisionDate: Date.parse(cipher.revisionDate || '') || 0,
+      creationDate: Date.parse(cipher.creationDate || '') || 0,
       haystack,
     };
   });

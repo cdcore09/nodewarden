@@ -113,6 +113,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Stock base.css paints a global 3px :focus-visible ring on every element;
+   inside Next that doubled up with our container rings (a box inside the
+   search box). Replace it with the Next ring so focus stays visible and
+   single-voiced; containers that show the ring themselves suppress it on
+   their inner input. */
+.nw-next :focus-visible {
+  outline: none;
+  box-shadow: var(--nx-focus-ring);
+}
+.nw-next .nx-search input:focus-visible {
+  box-shadow: none;
+}
+
 /* ── dark: the heavy register. Elevation flips from shadow to lightness —
    raised surfaces get lighter, shadows nearly vanish, hairlines carry
    structure. ── */

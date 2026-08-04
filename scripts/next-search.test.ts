@@ -88,3 +88,18 @@ test('limit caps results but total reports the full count', () => {
   assert.equal(results.length, 2);
   assert.equal(total, 3);
 });
+
+test('sortEntries orders by name, edited (newest first), and created (newest first)', async () => {
+  const { sortEntries } = await import('../webapp/src/lib/next/search');
+  const entries = buildSearchEntries([
+    { id: 'a', type: 1, decName: 'Bravo', revisionDate: '2026-02-01T00:00:00Z', creationDate: '2026-01-01T00:00:00Z' },
+    { id: 'b', type: 1, decName: 'Alpha', revisionDate: '2026-03-01T00:00:00Z', creationDate: '2025-01-01T00:00:00Z' },
+    { id: 'c', type: 1, decName: 'Charlie', revisionDate: '2026-01-01T00:00:00Z', creationDate: '2026-06-01T00:00:00Z' },
+  ] as unknown as Cipher[], []);
+  assert.deepEqual(sortEntries(entries, 'name').map((e) => e.id), ['b', 'a', 'c']);
+  assert.deepEqual(sortEntries(entries, 'edited').map((e) => e.id), ['b', 'a', 'c']);
+  assert.deepEqual(sortEntries(entries, 'created').map((e) => e.id), ['c', 'a', 'b']);
+  // missing dates sink to the end without throwing
+  const sparse = buildSearchEntries([{ id: 'x', type: 1, decName: 'X' }] as unknown as Cipher[], []);
+  assert.deepEqual(sortEntries([...sparse, ...entries], 'edited').map((e) => e.id), ['b', 'a', 'c', 'x']);
+});
