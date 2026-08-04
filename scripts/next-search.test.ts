@@ -42,8 +42,8 @@ test('buildSearchEntries indexes name, username, every uri, and folder name', ()
   assert.equal(fastmail.sub, 'cordero@fastmail.com');
   assert.equal(fastmail.hasTotp, true);
   assert.equal(fastmail.favorite, true);
-  assert.ok(fastmail.haystack.includes('https://betamail.example'));
-  assert.ok(fastmail.haystack.includes('personal'));
+  assert.ok(fastmail.haystack.some((field) => field === 'https://betamail.example'));
+  assert.ok(fastmail.haystack.some((field) => field === 'personal'));
   const gated = entries.find((e) => e.id === 'c2')!;
   assert.equal(gated.reprompt, true);
 });
