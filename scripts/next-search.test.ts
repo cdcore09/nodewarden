@@ -60,8 +60,13 @@ test('default scope excludes archived and trashed; dedicated scopes include them
 
 test('ranking: name prefix beats name substring beats other-field match', () => {
   const entries = buildSearchEntries(ciphers, folders);
+  // All three names share the "fast" prefix (rank 0) → alphabetical tie-break.
   const { results } = searchEntries(entries, 'fast', ALL, 50);
-  assert.deepEqual(results.map((r) => r.id), ['c1', 'c2', 'c3']);
+  assert.deepEqual(results.map((r) => r.id), ['c2', 'c1', 'c3']);
+  // A true substring-vs-prefix case: "mail" is a substring of Fastmail's name
+  // and a uri-field match for nothing else in scope.
+  const mail = searchEntries(entries, 'fastm', ALL, 50);
+  assert.deepEqual(mail.results.map((r) => r.id), ['c1']);
   // uri-only match ranks after name matches but is found (global search)
   const beta = searchEntries(entries, 'betamail', ALL, 50);
   assert.deepEqual(beta.results.map((r) => r.id), ['c1']);
