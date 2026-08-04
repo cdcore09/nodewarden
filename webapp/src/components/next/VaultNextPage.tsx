@@ -206,11 +206,16 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const requestCopy = (entry: SearchEntry, kind: CopyKind) => {
     if (entry.reprompt) {
       setGate({ entryId: entry.id, kind, error: '', submitting: false });
-      window.setTimeout(() => gateRef.current?.focus(), 0);
       return;
     }
     void performCopy(entry, kind);
   };
+
+  // Focus the gate input after it exists in the DOM (a setTimeout can fire
+  // before Preact commits the conditional render).
+  useEffect(() => {
+    if (gate) gateRef.current?.focus();
+  }, [gate?.entryId, gate?.kind]);
 
   const submitGate = async () => {
     if (!gate || gate.submitting) return;
@@ -284,13 +289,13 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         }
         return;
       }
-      if (!targetIsInput && !browseOpen && event.key.length === 1 && !event.altKey) {
+      if (!targetIsInput && !browseOpen && !gate && event.key.length === 1 && !event.altKey) {
         focusSearch();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commandMode, activeEntry, browseOpen]);
+  }, [commandMode, activeEntry, browseOpen, gate]);
 
   const markHintSeen = () => {
     setHintSeen(true);
