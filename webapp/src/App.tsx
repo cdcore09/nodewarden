@@ -5,6 +5,8 @@ import AppAuthenticatedShell from '@/components/AppAuthenticatedShell';
 import AppGlobalOverlays, { type AppConfirmState } from '@/components/AppGlobalOverlays';
 import AuthRequestApprovalDialog from '@/components/AuthRequestApprovalDialog';
 import AuthViews from '@/components/AuthViews';
+import AuthViewsNext from '@/components/next/AuthViewsNext';
+import { readUiVersion } from '@/lib/ui-version';
 import NotFoundPage from '@/components/NotFoundPage';
 import PublicSendPage from '@/components/PublicSendPage';
 import RecoverTwoFactorPage from '@/components/RecoverTwoFactorPage';
@@ -221,6 +223,10 @@ export default function App() {
   const [jwtWarning, setJwtWarning] = useState<{ reason: JwtUnsafeReason; minLength: number } | null>(initialBootstrap.jwtWarning);
 
   const [loginValues, setLoginValues] = useState({ email: '', password: '' });
+  // NodeWarden Next (issue #16): V2 shows auth failures inline; V1 keeps toasts.
+  const [authInlineError, setAuthInlineError] = useState('');
+  const reportUnlockError = (message: string) =>
+    readUiVersion() === 'v2' ? setAuthInlineError(message) : pushToast('error', message);
   const [registerValues, setRegisterValues] = useState({
     name: '',
     email: '',
@@ -951,6 +957,7 @@ export default function App() {
       pushToast('error', t('txt_please_input_master_password'));
       return;
     }
+    setAuthInlineError('');
     setPendingAuthAction('unlock');
     try {
       const result = await performUnlock(session, profile, unlockPassword, defaultKdfIterations);
@@ -965,9 +972,9 @@ export default function App() {
         setRememberDevice(true);
         return;
       }
-      pushToast('error', result.message || t('txt_unlock_failed_master_password_is_incorrect'));
+      reportUnlockError(result.message || t('txt_unlock_failed_master_password_is_incorrect'));
     } catch {
-      pushToast('error', t('txt_unlock_failed_master_password_is_incorrect'));
+      reportUnlockError(t('txt_unlock_failed_master_password_is_incorrect'));
     } finally {
       setPendingAuthAction(null);
     }
@@ -2403,10 +2410,12 @@ export default function App() {
   }
 
   if (phase === 'register' || phase === 'login' || phase === 'locked') {
+    const AuthSurface = readUiVersion() === 'v2' ? AuthViewsNext : (AuthViews as unknown as typeof AuthViewsNext);
     return (
       <>
-        <AuthViews
+        <AuthSurface
           mode={phase}
+          inlineError={authInlineError}
           pendingAction={pendingAuthAction}
           relaxedLoginInput={IS_DEMO_MODE}
           authPlaceholder={IS_DEMO_MODE ? t('txt_demo_auth_placeholder') : undefined}

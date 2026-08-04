@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NodeWarden Next — mockup gallery</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+<style>
+  .gallery { max-width: 1000px; margin: 0 auto; display: grid; gap: 12px; }
+  .gallery a {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 16px 20px;
+    border: 1px solid rgba(0,0,0,.14); border-radius: 10px;
+    text-decoration: none; color: inherit; background: rgba(255,255,255,.5);
+  }
+  :root[data-theme='dark'] .gallery a { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.03); }
+  .gallery a b { font-size: 14px; }
+  .gallery a span { opacity: .65; font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="mock-head">
+  <h1>NodeWarden Next — Phase 3b mockups</h1>
+  <span class="crumb">issue #16 · tokens: webapp/src/styles/next/tokens.css</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+<nav class="gallery">
+  <a href="01-unlock.html"><b>01 · Unlock</b><span>default · working · error · register — slice 1</span></a>
+  <a href="02-retrieval.html"><b>02 · Retrieval surface</b><span>results · copied · command mode · create-from-query · reprompt · scoped browse · action menu · first-run — slice 2</span></a>
+  <a href="03-detail.html"><b>03 · Item detail</b><span>side panel · revealed password — slice 3</span></a>
+  <a href="04-editor.html"><b>04 · Editor</b><span>new login with inline generator · dirty-cancel guard — slice 3</span></a>
+  <a href="05-share.html"><b>05 · Share dialog</b><span>loaded · loading · org-switch notice — slice 3.5</span></a>
+</nav>
+<p style="max-width:1000px; margin:24px auto; font-size:12px; opacity:.65">
+  Direction: precision developer-tool — no editorial styling. Both themes render from the canonical token file;
+  the toggle persists across pages. Review rule from Phase 1: a screen that adds steps to its journey narrative loses.
+</p>
+</body>
+</html>

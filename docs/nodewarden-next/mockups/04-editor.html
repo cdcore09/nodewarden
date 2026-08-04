@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next mockups — 04 editor</title>
+<link rel="stylesheet" href="../../../webapp/src/styles/next/tokens.css">
+<link rel="stylesheet" href="mock.css">
+<script src="mock.js"></script>
+</head>
+<body>
+
+<header class="mock-head">
+  <h1>04 · Editor (new login)</h1>
+  <span class="crumb">slice 3 · journeys J2, J3, J5 — one component, three journeys</span>
+  <button onclick="nxToggleTheme()">toggle theme</button>
+</header>
+
+<!-- ───────────── STATE: new login from create-from-query ───────────── -->
+<section class="state">
+  <p class="state-label">Created from query “tailscale” — name prefilled, username focused</p>
+  <div class="frame">
+    <div class="nw-next nx-split">
+      <div class="nx-shell" style="opacity:.45">
+        <div class="nx-col">
+          <div class="nx-search"><span class="q">tailscale</span></div>
+          <div class="nx-results">
+            <div class="nx-row is-active">
+              <span class="ico">＋</span>
+              <span class="main"><span class="title">Create login “tailscale”</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside class="nx-detail">
+        <div class="dhead">
+          <span class="ico">＋</span>
+          <div><h2>New login</h2></div>
+        </div>
+        <div class="nx-editor">
+          <div class="nx-field">
+            <span class="nx-overline">Name</span>
+            <div class="nx-input">Tailscale</div>
+          </div>
+          <div class="nx-field">
+            <span class="nx-overline">Username</span>
+            <div class="nx-input data is-focused"><span class="caret" style="height:16px"></span></div>
+          </div>
+          <div class="nx-field">
+            <span class="nx-overline">Password</span>
+            <div class="nx-input data password-input"><span class="ghost">paste, type, or generate</span>
+              <span class="trail"><button class="nx-iconbtn" title="Reveal">◉</button></span>
+            </div>
+            <div class="nx-genwell">
+              <span>korval-mesa-9-untended</span>
+              <span class="strength nx-badge ok">strong</span>
+              <span class="nx-hint"><span class="nx-kbd">⌘G</span> use / reroll</span>
+              <button class="nx-iconbtn" title="Password rules" style="margin-left:2px">⚙</button>
+            </div>
+          </div>
+          <div class="nx-field">
+            <span class="nx-overline">Website</span>
+            <div class="nx-input data"><span class="ghost">https://…</span></div>
+          </div>
+          <div class="nx-field">
+            <span class="nx-overline">One-time code secret</span>
+            <div class="nx-input data"><span class="ghost">otpauth:// or base32 · scan QR</span></div>
+          </div>
+          <details style="font-size:var(--nx-text-sm); color:var(--nx-ink-muted)">
+            <summary style="cursor:pointer">Folder · notes · custom fields · reprompt</summary>
+          </details>
+        </div>
+        <div style="margin-top:auto; display:flex; gap:var(--nx-sp-2); align-items:center">
+          <button class="nx-btn primary">Save <span class="nx-kbd" style="margin-left:2px; border-color:transparent; background:rgba(255,255,255,.2); color:inherit">⌘↵</span></button>
+          <button class="nx-btn ghost">Cancel</button>
+          <span class="nx-help" style="margin-left:auto">esc asks before discarding</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <p class="state-note">The generator lives under the password field as an offer, not a detour (fixes the
+     `/generator` round-trip): ⌘G accepts the candidate into the field; ⌘G again rerolls. Tab order runs
+     name → username → password → website → OTP. The admin-flavored long tail (folder, notes, custom fields,
+     reprompt) is folded behind a disclosure — present, but never taxing the capture moment. ⌘↵ saves and
+     returns to the item, copy-ready.</p>
+</section>
+
+<!-- ───────────── STATE: generator parameters ───────────── -->
+<section class="state">
+  <p class="state-label">Generator rules expanded — sites don't accept the same parameters</p>
+  <div class="frame" style="max-width:460px; margin-left:0">
+    <div class="nw-next" style="padding:var(--nx-sp-6)">
+      <div class="nx-field">
+        <span class="nx-overline">Password</span>
+        <div class="nx-input data password-input"><span class="ghost">paste, type, or generate</span></div>
+        <div class="nx-genwell">
+          <span>Kq7#vRw2$nLp9xTe</span>
+          <span class="strength nx-badge ok">strong</span>
+          <span class="nx-hint"><span class="nx-kbd">⌘G</span> use / reroll</span>
+          <button class="nx-iconbtn" title="Password rules" style="margin-left:2px; color:var(--nx-accent)">⚙</button>
+        </div>
+        <div class="nx-genparams">
+          <span class="nx-seg">
+            <button>words</button>
+            <button class="on">characters</button>
+          </span>
+          <span class="nx-step">
+            <button>−</button><span class="n">16</span><button>+</button>
+          </span>
+          <span class="nx-tog on">A-Z</span>
+          <span class="nx-tog on">0-9</span>
+          <span class="nx-tog on">!#$</span>
+          <span class="nx-tog">no ambiguous</span>
+        </div>
+        <span class="nx-help">Rules persist for this session; changing any rule rerolls the candidate.</span>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">The ⚙ on the generator well discloses the rules row: mode (passphrase words vs.
+     characters), length stepper, character-class toggles — the knobs sites actually force (length caps,
+     no symbols, digit requirements). Every change rerolls immediately so the candidate always reflects the
+     rules; ⌘G still accepts/rerolls without touching them. Mirrors the stock generator's option set
+     (`password-generator.ts`) so implementation reuses that logic unchanged.</p>
+</section>
+
+<!-- ───────────── STATE: dirty-cancel guard ───────────── -->
+<section class="state">
+  <p class="state-label">Esc with unsaved changes — inline guard, not a dialog</p>
+  <div class="frame" style="max-width:460px; margin-left:0">
+    <div class="nw-next" style="padding:var(--nx-sp-6)">
+      <div style="display:flex; gap:var(--nx-sp-2); align-items:center">
+        <span class="nx-help" style="color:var(--nx-warn)">Discard unsaved changes?</span>
+        <span class="grow" style="flex:1"></span>
+        <button class="nx-btn ghost" style="border-color:var(--nx-warn); color:var(--nx-warn)">Discard <span class="nx-kbd" style="margin-left:2px">↵</span></button>
+        <button class="nx-btn ghost">Keep editing <span class="nx-kbd" style="margin-left:2px">esc</span></button>
+      </div>
+    </div>
+  </div>
+  <p class="state-note">Replaces stock's silent discard (`VaultPage.tsx:692-704`). Renders in the editor footer;
+     both choices are one keystroke.</p>
+</section>
+
+</body>
+</html>

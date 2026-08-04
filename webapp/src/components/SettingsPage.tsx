@@ -6,6 +6,7 @@ import type { AccountPasskeyCredential, Profile, TwoFactorPasskeyCredential, Two
 import { AVAILABLE_LOCALES, getLocale, setLocale, t, type Locale } from '@/lib/i18n';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import SkinSelect from '@/components/SkinSelect';
+import UiVersionSelect from '@/components/next/UiVersionSelect';
 
 interface SettingsPageProps {
   profile: Profile;
@@ -574,6 +575,7 @@ export default function SettingsPage(props: SettingsPageProps) {
               </section>
 
               <SkinSelect />
+              <UiVersionSelect />
 
               <section className="settings-submodule">
                 <label className="field">
