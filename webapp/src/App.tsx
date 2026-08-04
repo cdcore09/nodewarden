@@ -2530,6 +2530,11 @@ export default function App() {
           loading={effectiveMainRoutesProps.ciphersLoading}
           emailForReprompt={profile?.email || session?.email || ''}
           onVerifyMasterPassword={effectiveMainRoutesProps.onVerifyMasterPassword}
+          onCreate={effectiveMainRoutesProps.onCreateVaultItem}
+          onUpdate={effectiveMainRoutesProps.onUpdateVaultItem}
+          onShare={effectiveMainRoutesProps.onShareVaultItem}
+          onLoadShareCollections={effectiveMainRoutesProps.onLoadShareCollections}
+          shareOrganizations={effectiveMainRoutesProps.shareOrganizations}
           onLock={handleLock}
           onLogout={logoutNow}
           onNotify={pushToast}
