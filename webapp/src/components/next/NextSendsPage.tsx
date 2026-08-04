@@ -3,11 +3,19 @@
 // here; creating them uses the file picker like the editor's attachments.
 import { useRef, useState } from 'preact/hooks';
 import { t } from '@/lib/i18n';
-import { FileText, Link2, Pencil, Plus, Trash2 } from 'lucide-preact';
+import { FileText, Link2, Pencil, Plus, Send as SendIcon, Trash2 } from 'lucide-preact';
 import type { Send, SendDraft } from '@/lib/types';
 
 const STR = {
-  empty: 'No sends yet. A send is an expiring, shareable link to a text note or file.',
+  intro: 'Share a secret note or file as an expiring link — the recipient needs no account, and you can kill the link at any time.',
+  emptyTitle: 'Share secrets that expire',
+  emptyBody: 'Passwords pasted into chat or email live forever in someone’s inbox. A send is a link that doesn’t: it self-destructs on schedule, can require a password, and shows you how often it was opened.',
+  steps: [
+    ['Create', 'a text note or pick a file — the link is copied for you on save'],
+    ['Share the link', 'anyone can open it, no account needed'],
+    ['It expires', 'on the schedule you set — or disable it instantly'],
+  ] as Array<[string, string]>,
+  saveHint: 'Saving copies the share link to your clipboard.',
   newText: 'New text send',
   newFile: 'New file send',
   copyLink: 'Copy link',
@@ -87,6 +95,7 @@ export default function NextSendsPage(props: NextSendsPageProps) {
 
   return (
     <div className="nx-list">
+      <div className="nx-help sends-intro">{STR.intro}</div>
       <div style={{ display: 'flex', gap: 'var(--nx-sp-2)', marginBottom: 'var(--nx-sp-3)' }}>
         <button type="button" className="nx-btn" onClick={() => { setEditing(null); setDraft(emptyDraft('text')); }}>
           <Plus size={14} /> {STR.newText}
@@ -148,6 +157,7 @@ export default function NextSendsPage(props: NextSendsPageProps) {
           </div>
             </div>
           </details>
+          {!editing && <div className="nx-help">{STR.saveHint}</div>}
           <div style={{ display: 'flex', gap: 'var(--nx-sp-2)' }}>
             <button type="button" className="nx-btn" disabled={saving || !draft.name.trim()} onClick={() => void save()}>
               {saving ? STR.saving : STR.save} <span className="nx-kbd on-fill">⌘↵</span>
@@ -160,7 +170,21 @@ export default function NextSendsPage(props: NextSendsPageProps) {
       )}
 
       <div className="sends-list">
-      {!props.loading && props.sends.length === 0 && !draft && <div className="nx-empty">{STR.empty}</div>}
+      {!props.loading && props.sends.length === 0 && !draft && (
+        <div className="sends-hero">
+          <div className="hero-ico"><SendIcon size={22} /></div>
+          <div className="hero-title">{STR.emptyTitle}</div>
+          <div className="hero-body">{STR.emptyBody}</div>
+          <ol className="hero-steps">
+            {STR.steps.map(([head, rest], index) => (
+              <li key={head}>
+                <span className="n nx-data">{index + 1}</span>
+                <span><strong>{head}</strong> — {rest}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       <div className="sends-cards">
       {props.sends.map((send) => (
