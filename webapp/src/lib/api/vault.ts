@@ -1517,6 +1517,50 @@ export async function createCipher(
   return body;
 }
 
+// POST /api/ciphers/:id/share — move a PERSONAL cipher into an org, re-encrypted
+// under the org key (Bitwarden share payload: { cipher, collectionIds }).
+// The synthetic cipher shape passed to buildCipherPayload carries the target
+// organizationId so getCipherKeys resolves the ORG key halves (fail-closed via
+// resolveCipherBaseKey), and drops the personal per-cipher key (undecryptable
+// under the org key). Password-history entries without a decrypted value are
+// dropped rather than passed through still encrypted under the personal key —
+// a key-switch passthrough would be permanently unreadable for the org.
+export async function shareCipher(
+  authedFetch: AuthedFetch,
+  session: SessionState,
+  cipher: Cipher,
+  draft: VaultDraft,
+  orgId: string,
+  collectionIds: string[],
+  orgKeys: Record<string, Uint8Array> | undefined
+): Promise<Cipher> {
+  const targetOrgId = String(orgId || '').trim();
+  const ids = Array.from(new Set(collectionIds.map((cid) => String(cid || '').trim()).filter(Boolean)));
+  if (!targetOrgId) throw new Error('Organization is required');
+  if (!ids.length) throw new Error('At least one collection is required');
+  if (cipher.organizationId) throw new Error('Item already belongs to an organization');
+
+  const decryptedHistory = Array.isArray(cipher.passwordHistory)
+    ? cipher.passwordHistory.filter((entry) => typeof entry?.decPassword === 'string')
+    : null;
+  const orgShape: Cipher = {
+    ...cipher,
+    organizationId: targetOrgId,
+    key: null,
+    passwordHistory: decryptedHistory && decryptedHistory.length ? decryptedHistory : null,
+  };
+  const payload = await buildCipherPayload(session, draft, orgShape, orgKeys);
+  payload.organizationId = targetOrgId;
+
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(cipher.id)}/share`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cipher: payload, collectionIds: ids }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Share item failed'));
+  return (await parseJson<Cipher>(resp))!;
+}
+
 export async function updateCipher(
   authedFetch: AuthedFetch,
   session: SessionState,

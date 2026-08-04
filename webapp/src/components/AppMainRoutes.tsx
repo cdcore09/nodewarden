@@ -94,6 +94,9 @@ export interface AppMainRoutesProps {
   onExport: (request: ExportRequest) => Promise<void>;
   onCreateVaultItem: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdateVaultItem: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
+  onShareVaultItem: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
+  onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
+  shareOrganizations: Array<{ id: string; name: string }>;
   onDeleteVaultItem: (cipher: Cipher) => Promise<void>;
   onArchiveVaultItem: (cipher: Cipher) => Promise<void>;
   onUnarchiveVaultItem: (cipher: Cipher) => Promise<void>;
@@ -301,6 +304,9 @@ export default function AppMainRoutes(props: AppMainRoutesProps) {
             onRefresh={props.onRefreshVault}
             onCreate={props.onCreateVaultItem}
             onUpdate={props.onUpdateVaultItem}
+            onShare={props.onShareVaultItem}
+            onLoadShareCollections={props.onLoadShareCollections}
+            shareOrganizations={props.shareOrganizations}
             onDelete={props.onDeleteVaultItem}
             onArchive={props.onArchiveVaultItem}
             onUnarchive={props.onUnarchiveVaultItem}

@@ -1544,7 +1544,16 @@ Object.assign(fi, {
   "txt_org_access_no_members": "No members to grant yet — invite someone first.",
   "txt_org_access_read_only": "Read only",
   "txt_org_access_hide_passwords": "Hide passwords",
-  "txt_org_access_updated": "Access updated"
+  "txt_org_access_updated": "Access updated",
+  "txt_org_share_button": "Share",
+  "txt_org_share_title": "Share to organization",
+  "txt_org_share_message": "Move this item into an organization and pick at least one collection. Confirmed members with access to those collections will see it. This cannot be undone from the web app.",
+  "txt_org_share_org_label": "Organization",
+  "txt_org_share_collections_label": "Collections",
+  "txt_org_share_no_collections": "This organization has no collections yet — create one on the organization page first.",
+  "txt_org_sharing": "Sharing…",
+  "txt_org_item_shared": "Item shared to the organization",
+  "txt_org_share_failed": "Failed to share item"
 });
 
 export default fi;
