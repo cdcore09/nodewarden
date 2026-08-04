@@ -1590,6 +1590,27 @@ export async function shareCipher(
   return (await parseJson<Cipher>(resp))!;
 }
 
+// PUT /api/ciphers/:id/collections — replace which of its org's collections an
+// EXISTING org cipher belongs to. No re-encryption: the cipher stays under the
+// same org key; only cipher_collections membership is rewritten server-side.
+export async function updateCipherCollections(
+  authedFetch: AuthedFetch,
+  cipherId: string,
+  collectionIds: string[]
+): Promise<Cipher> {
+  const id = String(cipherId || '').trim();
+  const ids = Array.from(new Set(collectionIds.map((cid) => String(cid || '').trim()).filter(Boolean)));
+  if (!id) throw new Error('Item id is required');
+  if (!ids.length) throw new Error('At least one collection is required');
+  const resp = await authedFetch(`/api/ciphers/${encodeURIComponent(id)}/collections`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ collectionIds: ids }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Update sharing failed'));
+  return (await parseJson<Cipher>(resp))!;
+}
+
 export async function updateCipher(
   authedFetch: AuthedFetch,
   session: SessionState,

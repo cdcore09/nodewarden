@@ -247,6 +247,7 @@ export const DEMO_CIPHERS: Cipher[] = [
     id: 'cipher-login-cloudflare',
     type: 1,
     organizationId: 'org-demo-acme',
+    collectionIds: ['col-demo-infra'],
     folderId: 'folder-devops',
     favorite: true,
     reprompt: 1,
@@ -302,6 +303,7 @@ export const DEMO_CIPHERS: Cipher[] = [
     id: 'cipher-login-microsoft',
     type: 1,
     organizationId: 'org-demo-acme',
+    collectionIds: ['col-demo-shared'],
     folderId: 'folder-work',
     favorite: false,
     reprompt: 0,
@@ -1597,10 +1599,17 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       await readonly();
       return { id: createDemoId('organization') };
     },
-    onShareVaultItem: async (cipher, orgId) => {
+    onShareVaultItem: async (cipher, orgId, collectionIds) => {
       const revisionDate = new Date().toISOString();
       state.setCiphers((prev) => prev.map((item) => (
-        item.id === cipher.id ? { ...item, organizationId: orgId, revisionDate } : item
+        item.id === cipher.id ? { ...item, organizationId: orgId, collectionIds: [...collectionIds], revisionDate } : item
+      )));
+      notify('success', t('txt_item_updated'));
+    },
+    onUpdateVaultItemCollections: async (cipher, collectionIds) => {
+      const revisionDate = new Date().toISOString();
+      state.setCiphers((prev) => prev.map((item) => (
+        item.id === cipher.id ? { ...item, collectionIds: [...collectionIds], revisionDate } : item
       )));
       notify('success', t('txt_item_updated'));
     },

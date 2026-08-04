@@ -62,8 +62,8 @@ const STR = {
   organizations: t('txt_org_page_title'),
   manageOrgs: 'Manage…',
   storage: 'Storage',
-  sharedStatic: (org: string) => (org ? `Shared to ${org}` : 'Shared to an organization'),
-  sharedStaticHelp: 'Owned by the organization — sharing moved it there and can’t be repeated from here.',
+  manageSharing: (org: string) => (org ? `Sharing · ${org}` : 'Sharing…'),
+  manageSharingHelp: 'Change which of the organization’s collections carry this item.',
   moveToFolder: 'Move to folder',
   noFolder: 'No folder',
   sort: { name: 'Name', edited: 'Last edited', created: 'Created' } as Record<SortMode, string>,
@@ -106,6 +106,7 @@ interface VaultNextPageProps {
   onCreate: (draft: VaultDraft, attachments?: File[]) => Promise<void>;
   onUpdate: (cipher: Cipher, draft: VaultDraft, options?: { addFiles?: File[]; removeAttachmentIds?: string[] }) => Promise<void>;
   onShare: (cipher: Cipher, orgId: string, collectionIds: string[]) => Promise<void>;
+  onUpdateCollections: (cipher: Cipher, collectionIds: string[]) => Promise<void>;
   onLoadShareCollections: (orgId: string) => Promise<Array<{ id: string; name: string | null }>>;
   shareOrganizations: Array<{ id: string; name: string }>;
   onDelete: (cipher: Cipher) => Promise<void>;
@@ -244,6 +245,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareMode, setShareMode] = useState<'share' | 'manage'>('share');
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSeed, setPaletteSeed] = useState('');
@@ -528,11 +530,20 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     if (!cipher || shareSubmitting) return;
     setShareSubmitting(true);
     try {
-      await props.onShare(cipher, orgId, collectionIds);
+      if (shareMode === 'manage') await props.onUpdateCollections(cipher, collectionIds);
+      else await props.onShare(cipher, orgId, collectionIds);
       setShareOpen(false);
     } catch { /* hook toasts its own error */ } finally {
       setShareSubmitting(false);
     }
+  };
+
+  const openSharing = (entryId: string) => {
+    const cipher = cipherById.get(entryId);
+    if (!cipher) return;
+    setOpenId(entryId);
+    setShareMode(cipher.organizationId ? 'manage' : 'share');
+    setShareOpen(true);
   };
 
   const copyRawValue = async (value: string, label: string, entryId?: string) => {
@@ -674,8 +685,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           if (key === 'u' && target.type === 1) { event.preventDefault(); requestCopy(target, 'username'); return; }
           if (key === 'o' && target.hasTotp) { event.preventDefault(); requestCopy(target, 'totp'); return; }
           if (key === 'e') { event.preventDefault(); editEntry(target); return; }
-          if (key === 's' && props.shareOrganizations.length > 0 && !target.organizationId) {
-            event.preventDefault(); setOpenId(target.id); setShareOpen(true); return;
+          if (key === 's' && props.shareOrganizations.length > 0) {
+            event.preventDefault(); openSharing(target.id); return;
           }
         }
         return;
@@ -1110,12 +1121,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         <DetailPanel
           cipher={openCipher}
           folders={props.folders}
+          orgName={openCipher.organizationId ? props.shareOrganizations.find((o) => o.id === openCipher.organizationId)?.name || null : null}
           canShare={props.shareOrganizations.length > 0}
           onCopyValue={(value, label) => void copyRawValue(value, label, openCipher.id)}
           onDownloadAttachment={(attachment) => void props.onDownloadAttachment(openCipher, attachment.id || '')}
           downloadingAttachmentKey={props.downloadingAttachmentKey}
           onEdit={() => startEdit(openCipher)}
-          onShare={() => setShareOpen(true)}
+          onShare={() => openSharing(openCipher.id)}
+          onManageSharing={() => openSharing(openCipher.id)}
           onMore={(x, y) => setRowMenu({ entryId: openCipher.id, x, y })}
           onClose={closePanels}
         />
@@ -1168,14 +1181,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               </button>
             )}
             {props.shareOrganizations.length > 0 && !rowMenuEntry.organizationId && !rowMenuEntry.deleted && (
-              <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); setOpenId(rowMenuEntry.id); setShareOpen(true); }}>
+              <button type="button" role="menuitem" className="mrow" onClick={() => { setRowMenu(null); openSharing(rowMenuEntry.id); }}>
                 <Share2 size={13} />{STR.share} <span className="k nx-kbd">⌘S</span>
               </button>
             )}
             {!!rowMenuEntry.organizationId && (
-              <div className="mrow is-static" role="presentation" title={STR.sharedStaticHelp}>
-                <Share2 size={13} />{STR.sharedStatic(props.shareOrganizations.find((o) => o.id === rowMenuEntry.organizationId)?.name || '')}
-              </div>
+              <button type="button" role="menuitem" className="mrow" title={STR.manageSharingHelp} onClick={() => { setRowMenu(null); openSharing(rowMenuEntry.id); }}>
+                <Share2 size={13} />{STR.manageSharing(props.shareOrganizations.find((o) => o.id === rowMenuEntry.organizationId)?.name || '')} <span className="k nx-kbd">⌘S</span>
+              </button>
             )}
             <div className="msep" />
             {rowMenuEntry.deleted ? (
@@ -1218,6 +1231,9 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           onConfirm={(orgId, collectionIds) => void submitShare(orgId, collectionIds)}
           onCancel={() => setShareOpen(false)}
           submitting={shareSubmitting}
+          mode={shareMode}
+          initialOrgId={shareMode === 'manage' ? openCipher.organizationId || undefined : undefined}
+          initialCollectionIds={shareMode === 'manage' ? openCipher.collectionIds || [] : undefined}
         />
       )}
 
