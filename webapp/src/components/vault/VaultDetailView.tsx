@@ -95,6 +95,7 @@ function PasswordHistoryDialog(props: {
 export default function VaultDetailView(props: VaultDetailViewProps) {
   const selectedAttachments = Array.isArray(props.selectedCipher.attachments) ? props.selectedCipher.attachments : [];
   const [showSshPrivateKey, setShowSshPrivateKey] = useState(false);
+  const [showApiKeySecret, setShowApiKeySecret] = useState(false);
   const [passwordHistoryOpen, setPasswordHistoryOpen] = useState(false);
   const [breachResult, setBreachResult] = useState<PasswordBreachResult | null>(null);
   const [checkingBreach, setCheckingBreach] = useState(false);
@@ -115,6 +116,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
     breachControllerRef.current?.abort();
     breachControllerRef.current = null;
     setShowSshPrivateKey(false);
+    setShowApiKeySecret(false);
     setPasswordHistoryOpen(false);
     setBreachResult(null);
     setCheckingBreach(false);
@@ -426,6 +428,35 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
               <div className="kv-line"><span>{t('txt_issuing_authority')}</span><strong>{props.selectedCipher.passport.decIssuingAuthority || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_issue_date')}</span><strong>{props.selectedCipher.passport.decIssueDate || ''}</strong></div>
               <div className="kv-line"><span>{t('txt_expiration_date')}</span><strong>{props.selectedCipher.passport.decExpirationDate || ''}</strong></div>
+            </div>
+          )}
+
+          {props.selectedCipher.apiKey && (
+            <div className="card">
+              <h4>{t('txt_api_key_details')}</h4>
+              <div className="kv-line"><span>{t('txt_provider')}</span><strong>{props.selectedCipher.apiKey.decProvider || ''}</strong></div>
+              <div className="kv-line"><span>{t('txt_key_id')}</span><strong>{props.selectedCipher.apiKey.decKeyId || ''}</strong></div>
+              <div className="kv-row">
+                <span className="kv-label">{t('txt_secret_key')}</span>
+                <div className="kv-main">
+                  <strong
+                    className="value-ellipsis"
+                    title={showApiKeySecret ? props.selectedCipher.apiKey.decKey || '' : maskSecret(props.selectedCipher.apiKey.decKey || '')}
+                  >
+                    {showApiKeySecret ? props.selectedCipher.apiKey.decKey || '' : maskSecret(props.selectedCipher.apiKey.decKey || '')}
+                  </strong>
+                </div>
+                <div className="kv-actions">
+                  <button type="button" className="btn btn-secondary small" onClick={() => setShowApiKeySecret((value) => !value)}>
+                    {showApiKeySecret ? <EyeOff size={14} className="btn-icon" /> : <Eye size={14} className="btn-icon" />}
+                    {showApiKeySecret ? t('txt_hide') : t('txt_reveal')}
+                  </button>
+                  <button type="button" className="btn btn-secondary small" onClick={() => copyToClipboard(props.selectedCipher.apiKey?.decKey || '')}>
+                    <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
+                  </button>
+                </div>
+              </div>
+              <div className="kv-line"><span>{t('txt_expiration_date')}</span><strong>{props.selectedCipher.apiKey.decExpirationDate || ''}</strong></div>
             </div>
           )}
 
