@@ -6,6 +6,8 @@ import { getProfileOrganizations, getUserPublicKey, ORGANIZATION_TYPE_OWNER, typ
 import { getFingerprintPhrase } from '@/lib/api/auth-requests';
 import { base64ToBytes } from '@/lib/crypto';
 import { useOrgMemberActions } from '@/hooks/useOrgMemberActions';
+import { useOrgCollectionActions } from '@/hooks/useOrgCollectionActions';
+import type { OrgCollectionGrant } from '@/lib/api/organizations';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { t } from '@/lib/i18n';
 
@@ -41,8 +43,23 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
     () => getProfileOrganizations(props.profile).find((o) => o.id === props.orgId) || null,
     [props.profile, props.orgId]
   );
-  const [tab] = useState<'members'>('members');
+  const [tab, setTab] = useState<'members' | 'collections'>('members');
   const { members, loading, error, invite, resend, remove, confirm } = useOrgMemberActions({
+    authedFetch: props.authedFetch,
+    orgId: props.orgId,
+    orgKeys: props.orgKeys,
+    onNotify: props.onNotify,
+  });
+  const {
+    collections,
+    loading: collectionsLoading,
+    error: collectionsError,
+    create: createCollection,
+    rename: renameCollection,
+    remove: removeCollection,
+    loadGrants,
+    saveGrants,
+  } = useOrgCollectionActions({
     authedFetch: props.authedFetch,
     orgId: props.orgId,
     orgKeys: props.orgKeys,
@@ -147,6 +164,108 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
     );
   }
 
+  const [collectionCreateOpen, setCollectionCreateOpen] = useState(false);
+  const [collectionNameInput, setCollectionNameInput] = useState('');
+  const [collectionRenameTarget, setCollectionRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [collectionDeleteTarget, setCollectionDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [collectionSubmitting, setCollectionSubmitting] = useState(false);
+  const [accessTarget, setAccessTarget] = useState<{ id: string; name: string } | null>(null);
+  const [accessRows, setAccessRows] = useState<Array<OrgCollectionGrant & { granted: boolean }>>([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessSubmitting, setAccessSubmitting] = useState(false);
+
+  const nonOwnerMembers = useMemo(() => members.filter((m) => m.type !== ORGANIZATION_TYPE_OWNER), [members]);
+
+  const submitCollectionCreate = async () => {
+    const name = collectionNameInput.trim();
+    if (!name || collectionSubmitting) return;
+    setCollectionSubmitting(true);
+    try {
+      await createCollection(name);
+      setCollectionCreateOpen(false);
+      setCollectionNameInput('');
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_collection_action_failed'));
+    } finally {
+      setCollectionSubmitting(false);
+    }
+  };
+
+  const submitCollectionRename = async () => {
+    const name = collectionNameInput.trim();
+    if (!collectionRenameTarget || !name || collectionSubmitting) return;
+    setCollectionSubmitting(true);
+    try {
+      await renameCollection(collectionRenameTarget.id, name);
+      setCollectionRenameTarget(null);
+      setCollectionNameInput('');
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_collection_action_failed'));
+    } finally {
+      setCollectionSubmitting(false);
+    }
+  };
+
+  const submitCollectionDelete = async () => {
+    if (!collectionDeleteTarget || collectionSubmitting) return;
+    setCollectionSubmitting(true);
+    try {
+      await removeCollection(collectionDeleteTarget.id);
+      setCollectionDeleteTarget(null);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_collection_action_failed'));
+    } finally {
+      setCollectionSubmitting(false);
+    }
+  };
+
+  const openAccessDialog = async (collection: { id: string; name: string }) => {
+    if (accessLoading) return;
+    setAccessLoading(true);
+    try {
+      const grants = await loadGrants(collection.id);
+      const byId = new Map(grants.map((g) => [g.orgUserId, g]));
+      setAccessRows(
+        nonOwnerMembers.map((m) => {
+          const grant = byId.get(m.id);
+          return {
+            orgUserId: m.id,
+            granted: !!grant,
+            readOnly: grant?.readOnly ?? false,
+            hidePasswords: grant?.hidePasswords ?? false,
+          };
+        })
+      );
+      setAccessTarget(collection);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_collection_action_failed'));
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const updateAccessRow = (orgUserId: string, patch: Partial<OrgCollectionGrant & { granted: boolean }>) => {
+    setAccessRows((prev) => prev.map((row) => (row.orgUserId === orgUserId ? { ...row, ...patch } : row)));
+  };
+
+  const submitAccess = async () => {
+    if (!accessTarget || accessSubmitting) return;
+    setAccessSubmitting(true);
+    try {
+      await saveGrants(
+        accessTarget.id,
+        accessRows
+          .filter((row) => row.granted)
+          .map(({ orgUserId, readOnly, hidePasswords }) => ({ orgUserId, readOnly, hidePasswords }))
+      );
+      setAccessTarget(null);
+    } catch (e) {
+      props.onNotify?.('error', e instanceof Error && e.message ? e.message : t('txt_org_collection_action_failed'));
+    } finally {
+      setAccessSubmitting(false);
+    }
+  };
+
   return (
     <div className="stack">
       <section className="card">
@@ -155,18 +274,112 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
             {t('txt_org_back')}
           </button>
           <h3>{org.name}</h3>
-          <button type="button" className="btn btn-primary small" onClick={() => setInviteOpen(true)}>
-            {t('txt_org_invite_button')}
-          </button>
+          {tab === 'members' ? (
+            <button type="button" className="btn btn-primary small" onClick={() => setInviteOpen(true)}>
+              {t('txt_org_invite_button')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary small"
+              disabled={!orgKeyReady}
+              title={orgKeyReady ? undefined : t('txt_org_key_unavailable')}
+              onClick={() => {
+                setCollectionNameInput('');
+                setCollectionCreateOpen(true);
+              }}
+            >
+              {t('txt_org_new_collection_button')}
+            </button>
+          )}
         </div>
         <div className="settings-category-tabs" role="tablist" aria-label={t('txt_org_members_tab')}>
-          <button type="button" role="tab" aria-selected={tab === 'members'} className="settings-category-tab active">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'members'}
+            className={`settings-category-tab ${tab === 'members' ? 'active' : ''}`}
+            onClick={() => setTab('members')}
+          >
             {t('txt_org_members_tab')}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'collections'}
+            className={`settings-category-tab ${tab === 'collections' ? 'active' : ''}`}
+            onClick={() => setTab('collections')}
+          >
+            {t('txt_org_collections_tab')}
+          </button>
         </div>
-        {loading && <p>{t('txt_org_members_loading')}</p>}
-        {!loading && error && <div className="empty empty-comfortable">{t('txt_org_members_error')}</div>}
-        {!loading && !error && (
+        {tab === 'collections' && collectionsLoading && <p>{t('txt_org_collections_loading')}</p>}
+        {tab === 'collections' && !collectionsLoading && collectionsError && (
+          <div className="empty empty-comfortable">{t('txt_org_collections_error')}</div>
+        )}
+        {tab === 'collections' && !collectionsLoading && !collectionsError && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('txt_org_col_collection')}</th>
+                <th>{t('txt_org_col_actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {collections.map((collection) => {
+                const displayName = collection.name ?? t('txt_org_collection_locked');
+                return (
+                  <tr key={collection.id}>
+                    <td data-label={t('txt_org_col_collection')}>
+                      {collection.name ? collection.name : <span className="muted">{displayName}</span>}
+                    </td>
+                    <td data-label={t('txt_org_col_actions')}>
+                      <div className="actions">
+                        <button
+                          type="button"
+                          className="btn btn-secondary small"
+                          disabled={accessLoading}
+                          onClick={() => void openAccessDialog({ id: collection.id, name: displayName })}
+                        >
+                          {t('txt_org_access_button')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary small"
+                          disabled={!orgKeyReady || !collection.name}
+                          title={orgKeyReady ? undefined : t('txt_org_key_unavailable')}
+                          onClick={() => {
+                            setCollectionNameInput(collection.name || '');
+                            setCollectionRenameTarget({ id: collection.id, name: displayName });
+                          }}
+                        >
+                          {t('txt_org_rename_button')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger small"
+                          onClick={() => setCollectionDeleteTarget({ id: collection.id, name: displayName })}
+                        >
+                          {t('txt_org_remove_button')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!collections.length && (
+                <tr>
+                  <td colSpan={2}>
+                    <div className="empty empty-comfortable">{t('txt_org_collections_empty')}</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+        {tab === 'members' && loading && <p>{t('txt_org_members_loading')}</p>}
+        {tab === 'members' && !loading && error && <div className="empty empty-comfortable">{t('txt_org_members_error')}</div>}
+        {tab === 'members' && !loading && !error && (
           <table className="table">
             <thead>
               <tr>
@@ -300,6 +513,113 @@ export default function OrganizationDetailPage(props: OrganizationDetailPageProp
             <span>{confirmTarget.member.email}</span>
           </div>
         )}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={collectionCreateOpen || !!collectionRenameTarget}
+        title={collectionRenameTarget ? t('txt_org_collection_rename_title') : t('txt_org_collection_create_title')}
+        confirmText={
+          collectionSubmitting
+            ? t('txt_org_collection_saving')
+            : collectionRenameTarget
+              ? t('txt_org_rename_button')
+              : t('txt_create')
+        }
+        cancelText={t('txt_cancel')}
+        confirmDisabled={collectionSubmitting || !collectionNameInput.trim()}
+        cancelDisabled={collectionSubmitting}
+        onConfirm={() => void (collectionRenameTarget ? submitCollectionRename() : submitCollectionCreate())}
+        onCancel={() => {
+          if (collectionSubmitting) return;
+          setCollectionCreateOpen(false);
+          setCollectionRenameTarget(null);
+          setCollectionNameInput('');
+        }}
+      >
+        <label className="field">
+          <span>{t('txt_name')}</span>
+          <input
+            className="input"
+            type="text"
+            maxLength={128}
+            value={collectionNameInput}
+            placeholder={t('txt_org_collection_name_placeholder')}
+            onInput={(e) => setCollectionNameInput((e.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={!!collectionDeleteTarget}
+        variant="warning"
+        title={t('txt_org_collection_delete_title')}
+        message={collectionDeleteTarget ? t('txt_org_collection_delete_message', { name: collectionDeleteTarget.name }) : ''}
+        confirmText={t('txt_org_remove_button')}
+        cancelText={t('txt_cancel')}
+        danger
+        confirmDisabled={collectionSubmitting}
+        cancelDisabled={collectionSubmitting}
+        onConfirm={() => void submitCollectionDelete()}
+        onCancel={() => {
+          if (!collectionSubmitting) setCollectionDeleteTarget(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!accessTarget}
+        title={accessTarget ? t('txt_org_access_title', { name: accessTarget.name }) : ''}
+        message={t('txt_org_access_help')}
+        confirmText={accessSubmitting ? t('txt_org_collection_saving') : t('txt_save')}
+        cancelText={t('txt_cancel')}
+        confirmDisabled={accessSubmitting}
+        cancelDisabled={accessSubmitting}
+        onConfirm={() => void submitAccess()}
+        onCancel={() => {
+          if (!accessSubmitting) setAccessTarget(null);
+        }}
+      >
+        {!nonOwnerMembers.length && <div className="empty empty-comfortable">{t('txt_org_access_no_members')}</div>}
+        {nonOwnerMembers.map((member) => {
+          const row = accessRows.find((r) => r.orgUserId === member.id);
+          if (!row) return null;
+          return (
+            <div key={member.id} className="field org-access-row">
+              <label className="backup-option-label">
+                <input
+                  type="checkbox"
+                  checked={row.granted}
+                  onInput={(e) => updateAccessRow(member.id, { granted: (e.currentTarget as HTMLInputElement).checked })}
+                />
+                <span>
+                  {member.email}{' '}
+                  <span className={`risk-badge org-status-${member.status}`}>{memberStatusLabel(member.status)}</span>
+                </span>
+              </label>
+              {row.granted && (
+                <div className="org-access-flags">
+                  <label className="backup-option-label">
+                    <input
+                      type="checkbox"
+                      checked={row.readOnly}
+                      onInput={(e) => updateAccessRow(member.id, { readOnly: (e.currentTarget as HTMLInputElement).checked })}
+                    />
+                    <span>{t('txt_org_access_read_only')}</span>
+                  </label>
+                  <label className="backup-option-label">
+                    <input
+                      type="checkbox"
+                      checked={row.hidePasswords}
+                      onInput={(e) =>
+                        updateAccessRow(member.id, { hidePasswords: (e.currentTarget as HTMLInputElement).checked })
+                      }
+                    />
+                    <span>{t('txt_org_access_hide_passwords')}</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </ConfirmDialog>
     </div>
   );

@@ -147,6 +147,97 @@ export async function removeOrgUser(authedFetch: AuthedFetch, orgId: string, org
   if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to remove member'));
 }
 
+export interface OrgCollectionGrant {
+  orgUserId: string;
+  readOnly: boolean;
+  hidePasswords: boolean;
+}
+
+export async function createOrgCollection(authedFetch: AuthedFetch, orgId: string, encName: string): Promise<void> {
+  const id = String(orgId || '').trim();
+  const name = String(encName || '').trim();
+  if (!id || !name) throw new Error('Organization id and collection name are required');
+  const resp = await authedFetch(`/api/organizations/${encodeURIComponent(id)}/collections`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to create collection'));
+}
+
+export async function updateOrgCollection(
+  authedFetch: AuthedFetch,
+  orgId: string,
+  collectionId: string,
+  encName: string
+): Promise<void> {
+  const id = String(orgId || '').trim();
+  const cid = String(collectionId || '').trim();
+  const name = String(encName || '').trim();
+  if (!id || !cid || !name) throw new Error('Organization id, collection id, and name are required');
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(id)}/collections/${encodeURIComponent(cid)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to rename collection'));
+}
+
+export async function deleteOrgCollection(authedFetch: AuthedFetch, orgId: string, collectionId: string): Promise<void> {
+  const id = String(orgId || '').trim();
+  const cid = String(collectionId || '').trim();
+  if (!id || !cid) throw new Error('Organization id and collection id are required');
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(id)}/collections/${encodeURIComponent(cid)}`,
+    { method: 'DELETE' }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to delete collection'));
+}
+
+export async function getOrgCollectionUsers(
+  authedFetch: AuthedFetch,
+  orgId: string,
+  collectionId: string
+): Promise<OrgCollectionGrant[]> {
+  const id = String(orgId || '').trim();
+  const cid = String(collectionId || '').trim();
+  if (!id || !cid) throw new Error('Organization id and collection id are required');
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(id)}/collections/${encodeURIComponent(cid)}/users`
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to load collection access'));
+  const body = await parseJson<{ data?: unknown[] }>(resp);
+  const rows = Array.isArray(body?.data) ? body!.data : [];
+  return rows.map((r: any) => ({
+    orgUserId: String(r.orgUserId),
+    readOnly: !!r.readOnly,
+    hidePasswords: !!r.hidePasswords,
+  }));
+}
+
+export async function putOrgCollectionUsers(
+  authedFetch: AuthedFetch,
+  orgId: string,
+  collectionId: string,
+  grants: OrgCollectionGrant[]
+): Promise<void> {
+  const id = String(orgId || '').trim();
+  const cid = String(collectionId || '').trim();
+  if (!id || !cid) throw new Error('Organization id and collection id are required');
+  const resp = await authedFetch(
+    `/api/organizations/${encodeURIComponent(id)}/collections/${encodeURIComponent(cid)}/users`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grants }),
+    }
+  );
+  if (!resp.ok) throw new Error(await parseErrorMessage(resp, 'Failed to update collection access'));
+}
+
 export async function acceptOrgInvitation(
   authedFetch: AuthedFetch,
   orgId: string,
