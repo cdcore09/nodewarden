@@ -238,7 +238,32 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [railCollapsed, setRailCollapsed] = useState(() => {
     try { return window.localStorage.getItem('nodewarden.next.rail.v1') === 'collapsed'; } catch { return false; }
   });
+  // Under 900px the rail leaves the grid entirely; the same toggle opens it
+  // as a drawer overlay instead (session-only state, never persisted).
+  const [railDrawerOpen, setRailDrawerOpen] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 899.9px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 899.9px)');
+    const onChange = () => {
+      setIsNarrow(mq.matches);
+      if (!mq.matches) setRailDrawerOpen(false);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
+    if (!railDrawerOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.stopPropagation(); setRailDrawerOpen(false); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [railDrawerOpen]);
   const toggleRail = () => {
+    if (isNarrow) {
+      setRailDrawerOpen((prev) => !prev);
+      return;
+    }
     setRailCollapsed((prev) => {
       try { window.localStorage.setItem('nodewarden.next.rail.v1', prev ? 'open' : 'collapsed'); } catch { /* session only */ }
       return !prev;
@@ -690,8 +715,15 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const rowMenuUri = rowMenuCipher?.login?.uris?.find((u) => u.decUri || u.uri);
 
   return (
-    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}`}>
-      <nav className="nx-rail" aria-label="Vault">
+    <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}${railDrawerOpen ? ' rail-drawer' : ''}`}>
+      {railDrawerOpen && <div className="nx-rail-scrim" onClick={() => setRailDrawerOpen(false)} />}
+      <nav
+        className="nx-rail"
+        aria-label="Vault"
+        onClick={(e) => {
+          if (railDrawerOpen && (e.target as HTMLElement).closest('button, a')) setRailDrawerOpen(false);
+        }}
+      >
         <div className="nx-wordmark"><span className="nx-mark" aria-hidden="true">N</span> NodeWarden</div>
 
         <div className="rail-group">
@@ -769,8 +801,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           <button
             type="button"
             className="nx-iconbtn lg"
-            title={railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!railCollapsed}
+            title={isNarrow ? 'Open navigation' : railCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={isNarrow ? railDrawerOpen : !railCollapsed}
             onClick={toggleRail}
           >
             <PanelLeft size={15} />
