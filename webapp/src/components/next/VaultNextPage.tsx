@@ -450,13 +450,20 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         }
         return;
       }
+      // Close the detail panel on Escape when focus is not in the search input
+      // (the input is hidden in the narrow takeover layout).
+      if (event.key === 'Escape' && panelOpen && document.activeElement !== inputRef.current) {
+        event.preventDefault();
+        closePanels();
+        return;
+      }
       if (!targetIsInput && !browseOpen && !gate && event.key.length === 1 && !event.altKey) {
         focusSearch();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [commandMode, activeEntry, browseOpen, gate, editorOpen, shareOpen, openCipher, entries]);
+  }, [commandMode, activeEntry, browseOpen, gate, editorOpen, shareOpen, openCipher, entries, panelOpen]);
 
   const markHintSeen = () => {
     setHintSeen(true);
