@@ -1,0 +1,44 @@
+name: client-compat
+
+# Contract test: the official @bitwarden/cli (pinned in
+# scripts/client-compat/cli-version) must complete config -> login -> sync ->
+# folder/cipher CRUD -> fresh-login round-trip against a local wrangler dev
+# instance. Passing this is the repo's definition of "official Bitwarden
+# clients can connect". Runs on every PR and nightly.
+
+on:
+  pull_request:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client-compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run crypto unit tests
+        run: node --test scripts/client-compat/crypto.test.mjs
+
+      - name: Run official-client contract test
+        run: npm run test:client-compat
+
+      - name: Dump server log on failure
+        if: failure()
+        run: tail -100 /tmp/wrangler-compat.log || true

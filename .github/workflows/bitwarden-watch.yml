@@ -1,0 +1,175 @@
+name: Bitwarden watch
+
+# Daily watcher for official Bitwarden releases (bitwarden/server, and
+# cli-v* releases of bitwarden/clients). A cheap check job finds the newest
+# release that has no "BW watch: <tag>" issue yet; a Claude agent then
+# triages the release against NodeWarden's compatible-server surface:
+# security/compat-relevant changes become an implementation PR reviewed by
+# cdcore09, everything else becomes labeled backlog issues, and every run
+# ends with a summary issue (the idempotency marker). clients releases also
+# bump the pinned CLI version and re-run the official-client contract test.
+
+on:
+  schedule:
+    - cron: '41 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bitwarden-watch
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      contents: read
+    outputs:
+      new_release: ${{ steps.check.outputs.new_release }}
+      tag: ${{ steps.check.outputs.tag }}
+      source_repo: ${{ steps.check.outputs.source_repo }}
+    steps:
+      - name: Find newest unprocessed release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SERVER_TAG="$(gh api repos/bitwarden/server/releases/latest --jq .tag_name)"
+          CLI_TAG="$(gh api 'repos/bitwarden/clients/releases?per_page=100' \
+            --jq '[.[] | select(.tag_name | startswith("cli-v")) | select(.prerelease | not)][0].tag_name')"
+          echo "latest: server=$SERVER_TAG clients-cli=$CLI_TAG"
+          for entry in "bitwarden/clients $CLI_TAG" "bitwarden/server $SERVER_TAG"; do
+            REPO="${entry% *}"; TAG="${entry#* }"
+            [ -n "$TAG" ] && [ "$TAG" != "null" ] || continue
+            SEEN="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
+              --search "\"BW watch: $TAG\" in:title" --json number --jq 'length')"
+            if [ "$SEEN" -eq 0 ]; then
+              echo "unprocessed: $REPO $TAG"
+              { echo "new_release=true"; echo "tag=$TAG"; echo "source_repo=$REPO"; } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "All releases already processed."
+          echo "new_release=false" >> "$GITHUB_OUTPUT"
+
+  watch:
+    needs: check
+    if: needs.check.outputs.new_release == 'true'
+    runs-on: ubuntu-latest
+    environment: upstream-sync
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare git
+        env:
+          SYNC_PAT: ${{ secrets.SYNC_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${SYNC_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+
+      - name: Triage release with Claude
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: |
+            --allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(jq:*),Read,Grep,Glob,Edit,Write"
+            --max-turns 120
+          prompt: |
+            You are the Bitwarden release watcher for cdcore09/nodewarden, a
+            minimal Bitwarden-compatible server on Cloudflare Workers. A new
+            official release exists: ${{ needs.check.outputs.tag }} in
+            ${{ needs.check.outputs.source_repo }}. NodeWarden reimplements
+            the server API — official code is NEVER merged; relevant changes
+            are PORTED as NodeWarden-native implementations. Work through the
+            phases strictly in order.
+
+            ## Phase 0 — Compat pin bump (bitwarden/clients releases only)
+            If the source repo is bitwarden/clients: write the version
+            (the tag minus its "cli-v" prefix) into
+            scripts/client-compat/cli-version, run `npm ci`, then run
+            `npm run test:client-compat`. Record pass/fail and every failing
+            step verbatim — contract failures are your highest-signal,
+            must-address findings. For bitwarden/server releases skip this
+            phase.
+
+            ## Phase 1 — Understand the release
+            Read the release notes:
+              gh release view "${{ needs.check.outputs.tag }}" -R "${{ needs.check.outputs.source_repo }}"
+            For items that look security- or protocol-relevant, inspect the
+            underlying changes (gh api compare between this tag and the
+            previous same-stream tag, or targeted file reads via the GitHub
+            API). Do not attempt to read the entire diff of a monorepo
+            release; scope reading to auth, crypto, KDF, sync payloads, API
+            request/response models, and cipher/vault data shapes.
+
+            ## Phase 2 — Triage against NodeWarden's surface
+            NodeWarden's server surface is src/ (routers, handlers, services,
+            config-response.ts) and migrations/. For each release item decide:
+            (a) SECURITY/COMPAT-RELEVANT — it changes what official clients
+            send/expect (endpoints, payload shapes, KDF params, crypto,
+            token/auth flows, config response fields) or fixes a
+            vulnerability class NodeWarden could share; (b) BACKLOG — useful
+            but not urgent (features, UX, new item capabilities); or
+            (c) IRRELEVANT to a compatible reimplementation (their infra, CI,
+            docs, mobile-store packaging, marketing). Every item gets an
+            explicit bucket and a one-line justification. Any Phase 0
+            contract-test failure is automatically bucket (a).
+
+            ## Phase 3 — Act, tiered
+            Bucket (a) findings: implement the port yourself on branch
+            port/bw-${{ needs.check.outputs.tag }}-<topic> following existing
+            patterns in src/. If a branch with that name already exists on
+            origin, do not push over it — record the collision for Phase 4
+            and treat this port as abandoned. Include the cli-version bump
+            from Phase 0 (if any) in this same branch so pin and fixes land
+            together. Verify
+            with `npm run build`, `npm run test:orgs`,
+            `npm run test:config-compatibility`, and
+            `npm run test:client-compat`. All green: push the branch (never
+            force) and open ONE PR:
+              gh pr create --base main --head <branch> \
+                --title "fix(compat): port <topic> from ${{ needs.check.outputs.tag }}" \
+                --label bw-watch --assignee cdcore09 --body "<markdown>"
+            The body must cite the upstream release item, explain the port,
+            and paste verification results. If you cannot get the checks
+            green, abandon cleanly: git reset --hard origin/main, delete the
+            local branch, and record the attempt for Phase 4.
+            Bucket (b) findings: create one issue per coherent theme, label
+            bw-backlog, no code:
+              gh issue create --title "BW backlog: <theme> (${{ needs.check.outputs.tag }})" --label bw-backlog --body "<markdown>"
+            Bucket (c): no action beyond the Phase 4 record.
+
+            ## Phase 4 — Summary issue (ALWAYS, and always LAST)
+            Create exactly one issue whose title contains the release tag
+            verbatim — it is the marker that stops this release from being
+            reprocessed, so create it only after all other work is complete:
+              gh issue create \
+                --title "BW watch: ${{ needs.check.outputs.tag }} — <one-line outcome>" \
+                --label bw-watch --body "<markdown>"
+            Body: Phase 0 contract-test result (if run), the full triage
+            table (item -> bucket -> justification, including dismissals),
+            links to any PR/backlog issues created, and — if a port was
+            abandoned — what was attempted and why it failed. If a port was
+            abandoned or the contract test is failing with no green fix,
+            also add the needs-attention label and --assignee cdcore09.
+            Never create a second summary issue for the same tag. No
+            Co-Authored-By trailers or AI attribution anywhere.
