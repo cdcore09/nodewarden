@@ -140,6 +140,7 @@ export function orgUserDetailsResponse(orgUser: OrganizationUser, user: { name: 
     resetPasswordEnrolled: false,
     usesKeyConnector: false,
     hasMasterPassword: true,
+    creationDate: orgUser.createdAt,
   };
 }
 

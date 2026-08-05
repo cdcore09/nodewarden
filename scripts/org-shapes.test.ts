@@ -74,6 +74,7 @@ test('orgUserDetailsResponse maps enums and tolerates a missing user row', () =>
   assert.equal(detail.type, 0);
   assert.equal(detail.status, 2);
   assert.equal(detail.name, 'Me');
+  assert.equal(detail.creationDate, membership.orgUser.createdAt);
   const pending = orgUserDetailsResponse({ ...membership.orgUser, userId: null, status: 'invited', role: 'user' }, null) as any;
   assert.equal(pending.status, 0);
   assert.equal(pending.type, 2);
