@@ -101,7 +101,10 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # SYNC_PAT, not GITHUB_TOKEN: the action provisions this token to
+          # Claude's gh calls (overriding step env), and GITHUB_TOKEN cannot
+          # create PRs that trigger CI.
+          github_token: ${{ secrets.SYNC_PAT }}
           claude_args: |
             --allowedTools "Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*),Bash(node:*),Read,Grep,Glob,Edit"
             --max-turns 100
