@@ -1184,14 +1184,23 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 className="nx-row-check"
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => { shiftDownRef.current = e.shiftKey; }}
+                onKeyDown={(e) => { shiftDownRef.current = e.shiftKey; }}
               >
                 <input
                   type="checkbox"
                   checked={selection.has(entry.id)}
                   aria-label={STR.selectItem(entry.name)}
                   onChange={() => {
+                    // The checkbox's own `change` event carries no modifier
+                    // info (unlike a MouseEvent), so the immediately-preceding
+                    // mousedown/keydown on this label stashed shiftKey for us
+                    // — covers both mouse shift-click and keyboard shift+Space.
+                    // Consume-and-reset so a later plain activation (of either
+                    // kind) never reads a stale shift=true from this one.
+                    const shiftHeld = shiftDownRef.current;
+                    shiftDownRef.current = false;
                     setSelection((current) =>
-                      shiftDownRef.current
+                      shiftHeld
                         ? rangeSelect(current, visibleIds, selectionAnchor, entry.id)
                         : toggleSelection(current, entry.id)
                     );
