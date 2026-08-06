@@ -5,10 +5,10 @@ import { readUiVersion, setUiVersion, type UiVersion } from '@/lib/ui-version';
 // upstream locale files — same policy as SkinSelect.tsx.
 const LABEL = 'Interface';
 const HELP =
-  'NodeWarden Next is the keyboard-first experimental interface. Applies from the next unlock. Saved in this browser only.';
+  'NodeWarden Next is the keyboard-first default interface. Classic is the admin console for deep security flows. Applies from the next unlock. Saved in this browser only.';
 const OPTIONS: ReadonlyArray<{ id: UiVersion; label: string }> = [
-  { id: 'v1', label: 'Classic (default)' },
-  { id: 'v2', label: 'NodeWarden Next (experimental)' },
+  { id: 'v1', label: 'Classic (admin console)' },
+  { id: 'v2', label: 'NodeWarden Next (default)' },
 ];
 
 export default function UiVersionSelect() {
