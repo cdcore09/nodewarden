@@ -68,6 +68,7 @@ const STR = {
   moveToFolder: 'Move to folder',
   noFolder: 'No folder',
   newFolder: 'New folder',
+  folderOptions: 'Folder options',
   renameFolder: 'Rename folder',
   deleteFolder: 'Delete folder',
   deleteFolderTitle: (name: string) => `Delete “${name}”?`,
@@ -951,13 +952,30 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             </div>
             {props.folders.map((folder) => {
               const name = folder.decName || folder.name || '';
-              return railLink(
-                `f${folder.id}`,
-                name,
-                <FolderIcon size={14} />,
-                { kind: 'folder', folderId: folder.id, label: name },
-                counts.byFolder.get(folder.id),
-                (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
+              return (
+                <div key={`fw${folder.id}`} className="rail-folder-row">
+                  {railLink(
+                    `f${folder.id}`,
+                    name,
+                    <FolderIcon size={14} />,
+                    { kind: 'folder', folderId: folder.id, label: name },
+                    counts.byFolder.get(folder.id),
+                    (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
+                  )}
+                  <button
+                    type="button"
+                    className="nx-iconbtn rail-folder-more"
+                    aria-label={STR.folderOptions}
+                    title={STR.folderOptions}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setFolderMenu({ folderId: folder.id, name, x: rect.right, y: rect.bottom + 4 });
+                    }}
+                  >
+                    <MoreHorizontal size={12} />
+                  </button>
+                </div>
               );
             })}
           </div>

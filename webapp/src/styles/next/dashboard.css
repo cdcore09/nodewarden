@@ -93,6 +93,20 @@
   font-variant-numeric: tabular-nums;
   color: var(--nx-ink-faint);
 }
+/* Folder rows pair the nav button with a visible-on-hover/focus "..."
+   trigger, mirroring the item list's .rowacts/.nx-row-check reveal. */
+.nx-rail .rail-folder-row { display: flex; align-items: center; gap: 2px; }
+.nx-rail .rail-folder-row .rail-link { width: auto; flex: 1; min-width: 0; }
+.nx-rail .rail-folder-more {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  transition: opacity var(--nx-dur-1) var(--nx-ease);
+}
+.nx-rail .rail-folder-more svg { width: 12px; height: 12px; }
+.nx-rail .rail-folder-row:hover .rail-folder-more,
+.nx-rail .rail-folder-row:focus-within .rail-folder-more { opacity: 1; }
 .nx-rail .rail-link.on .count { color: var(--nx-accent); }
 .nx-rail .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
 .nx-rail .rail-sep { height: 1px; background: var(--nx-line-soft); margin: var(--nx-sp-1) var(--nx-sp-2); }
