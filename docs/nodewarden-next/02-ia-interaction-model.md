@@ -95,7 +95,7 @@ Stock route inventory (from `AppMainRoutes.tsx:224-561`): `/vault`, `/vault/totp
 | Input | Result |
 |---|---|
 | plain text | Vault-global fuzzy-ish match (name, username, **all** URIs, folder name; fixes stock index gaps at `VaultPage.tsx:324-338`). Never scoped by residual state — scoping exists only as visible chips. |
-| `>` prefix | **Command mode**: commands fuzzy-matched (`>new card`, `>audit`, `>settings`, `>import`, `>lock`, `>classic ui`, `>admin`, `>organizations`, `>sends`, `>generator`…). VS Code convention; keeps item results and commands from polluting each other. |
+| `>` prefix | **Command mode**: commands fuzzy-matched (`>new card`, `>audit`, `>settings`, `>import`, `>lock`, `>admin`, `>organizations`, `>sends`, `>generator`…). VS Code convention; keeps item results and commands from polluting each other. (No `>classic ui` command was ever built — superseded, see the 2026-08-06 changelog; the switch lives in Settings → Interface.) |
 | no matches | The result list offers **“Create login ‘‹query›’”** — Enter opens the editor with the name prefilled (J2 shortcut; also converts every failed retrieval into a capture opportunity). |
 | scope chip active | Chip renders *inside* the search bar (e.g. `[folder: Work] fas`). Added via browse panel or `in:`/`type:` tokens; removed with Backspace at query start. Visible = never silent (J1 criterion). |
 
@@ -172,7 +172,7 @@ Findings list uses the identical list mechanics: arrows, `Enter` = open fix (edi
 
 ## 6. Where org/admin surfaces live (so retrieval pays no tax)
 
-- **Zero admin chrome on the retrieval surface.** No sidebar entries, no toolbar buttons, no nav tabs. The only persistent non-search UI: the hint bar and one unobtrusive **app menu** button (top corner) containing: account/lock/logout, theme/skin, switch to classic UI, and links into stock surfaces — the same list command mode exposes, for mouse users.
+- **Zero admin chrome on the retrieval surface.** No sidebar entries, no toolbar buttons, no nav tabs. The only persistent non-search UI: the hint bar and one unobtrusive **app menu** button (top corner) containing: account/lock/logout, theme/skin, and links into stock surfaces — the same list command mode exposes, for mouse users. (The switch to classic UI is not in this menu — it lives in Next Settings → Interface, plus the `?classic=1` bypass; see the 2026-08-06 changelog.)
 - **Command mode is the front door to everything else.** As of the 2026-08-06 changelog above, `>settings`, `>organizations`, `>import`, `>sends`, `>generator`, and `>audit` now open native Next surfaces rather than jumping to stock. Genuine jumps to the classic admin console remain `>admin`, `>backup`, `>logs`, `>help`, plus the security escape hatches inside Next Settings (master password, 2FA, API keys, devices, domain rules). Jumping to a stock surface is a normal navigation; `⌘K` in stock is *not* claimed (stock stays untouched per merge-safety) — returning to Next is via the vault nav link, which the shell hook points at the Next surface while the flag is on.
 - **Org-ness inside Next appears exactly twice:** the org badge on shared items (detail + result row, J4) and the share dialog. Collection browsing is a browse-panel scope, not a persistent tree.
 
@@ -208,7 +208,7 @@ One deliberate amendment to a Phase 1 count: J2's "⌘N" is impossible in a brow
 3. **Result row anatomy** — icon, name, username, org badge, TOTP presence/countdown, matched-field indicator; what the "copied ✓ (clears in 28s)" state looks like.
 4. **`⌘O`/`⌘G`/`⌘S` mnemonics under i18n** — accelerators stay fixed across locales (muscle memory > mnemonic), but hint-bar labels localize; verify no locale renders the hint bar too wide.
 5. **Chip syntax** (`in:`, `type:`) — power-user affordance; typed tokens may slip to a later slice, browse-panel chips are the slice-2 floor.
-6. Exact command list for `>` mode at slice 2 (minimum: new ×8 types, audit, generator, settings, import, classic ui, lock, logout).
+6. Exact command list for `>` mode at slice 2 (minimum: new ×8 types, audit, generator, settings, import, lock, logout). (`classic ui` dropped — superseded, see the 2026-08-06 changelog; the switch lives in Settings → Interface.)
 
 ## Phase 3 next step (per plan of record)
 
