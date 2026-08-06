@@ -174,7 +174,21 @@
   overflow-y: auto;
   padding: var(--nx-sp-3) var(--nx-sp-6) var(--nx-sp-8);
 }
-.nx-list .nx-row { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.nx-list .nx-row { grid-template-columns: 20px 28px minmax(0, 1fr) auto; }
+.nx-list .nx-row.is-selected { background: var(--nx-accent-soft); }
+.nx-row-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.nx-row-check input { margin: 0; cursor: pointer; }
+.nx-list .nx-row:hover .nx-row-check,
+.nx-list .nx-row:focus-within .nx-row-check,
+.nx-list.has-selection .nx-row-check { opacity: 1; }
 .nx-list .nx-row .rowacts {
   display: none;
   align-items: center;
@@ -399,6 +413,10 @@
   background: var(--nx-accent-soft);
 }
 .nx-menu .mrow.danger { color: var(--nx-danger); }
+.nx-selbar-actions { display: inline-flex; align-items: center; gap: var(--nx-sp-2); }
+.nx-dashhead .hbtn.danger { color: var(--nx-danger); border-color: var(--nx-danger); }
+.nx-dashhead .hbtn.danger:hover { background: var(--nx-danger-soft); }
+.nx-dashhead .hbtn:disabled { opacity: 0.5; cursor: default; }
 .nx-sr-only {
   position: absolute;
   width: 1px;

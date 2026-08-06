@@ -2555,6 +2555,11 @@ export default function App() {
           onUnarchive={effectiveMainRoutesProps.onUnarchiveVaultItem}
           onRestore={effectiveMainRoutesProps.onRestoreVaultItems}
           onBulkPermanentDelete={effectiveMainRoutesProps.onBulkPermanentDeleteVaultItems}
+          onBulkDelete={effectiveMainRoutesProps.onBulkDeleteVaultItems}
+          onBulkRestore={effectiveMainRoutesProps.onBulkRestoreVaultItems}
+          onBulkArchive={effectiveMainRoutesProps.onBulkArchiveVaultItems}
+          onBulkUnarchive={effectiveMainRoutesProps.onBulkUnarchiveVaultItems}
+          onBulkMove={effectiveMainRoutesProps.onBulkMoveVaultItems}
           onRefresh={effectiveMainRoutesProps.onRefreshVault}
           onDownloadAttachment={effectiveMainRoutesProps.onDownloadVaultAttachment}
           downloadingAttachmentKey={effectiveMainRoutesProps.downloadingAttachmentKey}
