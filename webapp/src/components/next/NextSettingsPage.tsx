@@ -6,7 +6,11 @@
 import { t, AVAILABLE_LOCALES, getLocale, setLocale, type Locale } from '@/lib/i18n';
 import { readUiVersion, setUiVersion, type UiVersion } from '@/lib/ui-version';
 import { SKINS, readSkin, setSkin, type SkinId } from '@/lib/skin';
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import {
+  EXPORT_FORMATS, type EncryptedJsonMode, type ExportFormatId, type ExportRequest,
+} from '@/lib/export-formats';
+import { useDialogFocus } from './useDialogFocus';
 
 const STR = {
   appearance: 'Appearance',
@@ -33,6 +37,23 @@ const STR = {
   backup: 'Backup center',
   admin: 'Admin panel',
   logs: 'Log center',
+  exportSection: 'Export vault',
+  exportHelp: 'Download a copy of your vault. Pick a format and confirm with your master password.',
+  exportButton: 'Export…',
+  exportDialogTitle: 'Export vault',
+  exportFormatLabel: 'Format',
+  exportModeLabel: 'Verify with',
+  exportModes: { account: 'Account password', password: 'A separate file password' } as Record<EncryptedJsonMode, string>,
+  exportFilePasswordLabel: 'File password',
+  exportZipPasswordLabel: 'Zip password (optional)',
+  exportMasterPasswordLabel: 'Master password',
+  exportSubmit: 'Export',
+  exportSubmitting: 'Exporting…',
+  exportCancel: 'Cancel',
+  exportSuccess: 'Vault exported',
+  exportFilePasswordRequired: 'A file password is required',
+  exportMasterPasswordRequired: 'Master password is required',
+  exportFailed: 'Export failed',
 };
 
 type LockMinutes = 0 | 1 | 5 | 15 | 30;
@@ -46,6 +67,9 @@ interface NextSettingsPageProps {
   onSessionTimeoutActionChange: (action: 'lock' | 'logout') => void;
   navigate: (path: string) => void;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
+  onExport: (request: ExportRequest) => Promise<void>;
+  exportDialogOpen: boolean;
+  onExportDialogOpenChange: (open: boolean) => void;
 }
 
 function Row(props: { label: string; help?: string; children: preact.ComponentChildren }) {
@@ -60,10 +84,100 @@ function Row(props: { label: string; help?: string; children: preact.ComponentCh
   );
 }
 
+// Mirrors VaultNextPage's TrappedDialog (issue #16 a11y bar): trap Tab,
+// restore focus to the opener, close on Escape.
+function Dialog(props: { label: string; children: preact.ComponentChildren; onClose?: () => void }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(boxRef);
+  return (
+    <div className="nx-scrim" style={{ zIndex: 35 }}>
+      <div
+        ref={boxRef}
+        className="nx-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={props.label}
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && props.onClose) { e.preventDefault(); e.stopPropagation(); props.onClose(); }
+        }}
+      >
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
+const EXPORT_ENCRYPTED_FORMATS = new Set<ExportFormatId>(['bitwarden_encrypted_json', 'bitwarden_encrypted_json_zip', 'nodewarden_encrypted_json']);
+const EXPORT_ZIP_FORMATS = new Set<ExportFormatId>(['bitwarden_json_zip', 'bitwarden_encrypted_json_zip']);
+
+// .nx-field is only styled under .nx-auth/.nx-editor elsewhere in Next; this
+// dialog renders outside both, so pin the intended layout locally.
+const FIELD_STYLE = { display: 'flex', flexDirection: 'column', gap: '6px' } as const;
+
 export default function NextSettingsPage(props: NextSettingsPageProps) {
   const [uiVersion, setUiVersionState] = useState<UiVersion>(() => readUiVersion());
   const [skin, setSkinState] = useState<SkinId>(() => readSkin());
   const [locale, setLocaleState] = useState<Locale>(() => getLocale());
+
+  const [exportFormat, setExportFormat] = useState<ExportFormatId>('bitwarden_json');
+  const [encryptedJsonMode, setEncryptedJsonMode] = useState<EncryptedJsonMode>('account');
+  const [filePassword, setFilePassword] = useState('');
+  const [zipPassword, setZipPassword] = useState('');
+  const [masterPassword, setMasterPassword] = useState('');
+  const [exportSubmitting, setExportSubmitting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  const exportNeedsMode = EXPORT_ENCRYPTED_FORMATS.has(exportFormat);
+  const exportNeedsFilePassword = exportNeedsMode && encryptedJsonMode === 'password';
+  const exportIsZip = EXPORT_ZIP_FORMATS.has(exportFormat);
+
+  // Reset the form fresh every time the dialog opens (covers both the
+  // in-page "Export…" button and the palette command reaching in from
+  // outside — see VaultNextPage's exportDialogOpen/onExportDialogOpenChange).
+  useEffect(() => {
+    if (!props.exportDialogOpen) return;
+    setExportFormat('bitwarden_json');
+    setEncryptedJsonMode('account');
+    setFilePassword('');
+    setZipPassword('');
+    setMasterPassword('');
+    setExportError('');
+  }, [props.exportDialogOpen]);
+
+  const closeExportDialog = () => {
+    if (exportSubmitting) return;
+    props.onExportDialogOpenChange(false);
+  };
+
+  async function submitExport() {
+    if (exportSubmitting) return;
+    if (exportNeedsFilePassword && !filePassword.trim()) {
+      setExportError(STR.exportFilePasswordRequired);
+      return;
+    }
+    if (!masterPassword.trim()) {
+      setExportError(STR.exportMasterPasswordRequired);
+      return;
+    }
+    setExportSubmitting(true);
+    setExportError('');
+    try {
+      await props.onExport({
+        format: exportFormat,
+        encryptedJsonMode: exportNeedsMode ? encryptedJsonMode : undefined,
+        filePassword: exportNeedsFilePassword ? filePassword.trim() : undefined,
+        zipPassword: exportIsZip ? zipPassword.trim() : undefined,
+        masterPassword: masterPassword.trim(),
+      });
+      props.onExportDialogOpenChange(false);
+      props.onNotify('success', STR.exportSuccess);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : STR.exportFailed);
+    } finally {
+      setExportSubmitting(false);
+    }
+  }
 
   return (
     <div className="nx-list nx-settings">
@@ -183,8 +297,113 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
           ))}
         </div>
       </div>
+
+      <div className="set-section set-card">
+        <div className="nx-overline">{STR.exportSection}</div>
+        <div className="nx-help" style={{ marginBottom: 'var(--nx-sp-2)' }}>{STR.exportHelp}</div>
+        <div>
+          <button type="button" className="nx-btn" onClick={() => props.onExportDialogOpenChange(true)}>
+            {STR.exportButton}
+          </button>
+        </div>
       </div>
       </div>
+      </div>
+
+      {props.exportDialogOpen && (
+        <Dialog label={STR.exportDialogTitle} onClose={exportSubmitting ? undefined : closeExportDialog}>
+          <h3>{STR.exportDialogTitle}</h3>
+
+          <label className="nx-field" style={FIELD_STYLE}>
+            <span>{STR.exportFormatLabel}</span>
+            <select
+              className="nx-input"
+              value={exportFormat}
+              disabled={exportSubmitting}
+              onInput={(e) => setExportFormat((e.currentTarget as HTMLSelectElement).value as ExportFormatId)}
+            >
+              {EXPORT_FORMATS.map((format) => (
+                <option key={format.id} value={format.id}>{format.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {exportNeedsMode && (
+            <div className="nx-field" style={FIELD_STYLE}>
+              <span>{STR.exportModeLabel}</span>
+              <div role="radiogroup" aria-label={STR.exportModeLabel} style={{ display: 'flex', gap: 'var(--nx-sp-2)' }}>
+                {(['account', 'password'] as EncryptedJsonMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={encryptedJsonMode === mode}
+                    className={`nx-tog${encryptedJsonMode === mode ? ' on' : ''}`}
+                    disabled={exportSubmitting}
+                    onClick={() => setEncryptedJsonMode(mode)}
+                  >
+                    {STR.exportModes[mode]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {exportNeedsFilePassword && (
+            <label className="nx-field" style={FIELD_STYLE}>
+              <span>{STR.exportFilePasswordLabel}</span>
+              <input
+                className="nx-input nx-data"
+                type="password"
+                autoComplete="new-password"
+                disabled={exportSubmitting}
+                value={filePassword}
+                onInput={(e) => setFilePassword((e.currentTarget as HTMLInputElement).value)}
+              />
+            </label>
+          )}
+
+          {exportIsZip && (
+            <label className="nx-field" style={FIELD_STYLE}>
+              <span>{STR.exportZipPasswordLabel}</span>
+              <input
+                className="nx-input nx-data"
+                type="password"
+                autoComplete="new-password"
+                disabled={exportSubmitting}
+                value={zipPassword}
+                onInput={(e) => setZipPassword((e.currentTarget as HTMLInputElement).value)}
+              />
+            </label>
+          )}
+
+          <label className="nx-field" style={FIELD_STYLE}>
+            <span>{STR.exportMasterPasswordLabel}</span>
+            <input
+              className="nx-input nx-data"
+              type="password"
+              autoComplete="current-password"
+              disabled={exportSubmitting}
+              value={masterPassword}
+              onInput={(e) => setMasterPassword((e.currentTarget as HTMLInputElement).value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); void submitExport(); }
+              }}
+            />
+          </label>
+
+          {exportError && <div className="nx-error" role="alert">{exportError}</div>}
+
+          <div className="dfoot">
+            <button type="button" className="nx-btn ghost" disabled={exportSubmitting} onClick={closeExportDialog}>
+              {STR.exportCancel} <span className="nx-kbd">esc</span>
+            </button>
+            <button type="button" className="nx-btn" disabled={exportSubmitting} onClick={() => void submitExport()}>
+              {exportSubmitting ? STR.exportSubmitting : STR.exportSubmit} <span className="nx-kbd on-fill">↵</span>
+            </button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

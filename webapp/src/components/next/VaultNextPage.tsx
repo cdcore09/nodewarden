@@ -24,6 +24,7 @@ import type { ImportResultSummary } from '@/components/ImportPage';
 import ShortcutSheet from './ShortcutSheet';
 import { useDialogFocus } from './useDialogFocus';
 import type { Send, SendDraft } from '@/lib/types';
+import type { ExportRequest } from '@/lib/export-formats';
 import { generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { t } from '@/lib/i18n';
 import { calcTotpNow } from '@/lib/crypto';
@@ -157,6 +158,7 @@ interface VaultNextPageProps {
     payload: CiphersImportPayload,
     options: { folderMode: 'original' | 'none' | 'target'; targetFolderId: string | null }
   ) => Promise<ImportResultSummary>;
+  onExport: (request: ExportRequest) => Promise<void>;
   authedFetch: AuthedFetch;
   orgKeys: Record<string, Uint8Array>;
 }
@@ -287,6 +289,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSeed, setPaletteSeed] = useState('');
+  // Owned here (not by NextSettingsPage) so the palette's "Export vault…"
+  // command can open the dialog whether or not the settings page is already
+  // mounted — mirrors how folderDialog is reachable from both the rail and
+  // the palette's onStartCreateFolder.
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; seconds: number | null } | null>(null);
   const [gate, setGate] = useState<GateState | null>(null);
@@ -1233,6 +1240,9 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             onSessionTimeoutActionChange={props.onSessionTimeoutActionChange}
             navigate={navigate}
             onNotify={props.onNotify}
+            onExport={props.onExport}
+            exportDialogOpen={exportDialogOpen}
+            onExportDialogOpenChange={setExportDialogOpen}
           />
         )}
         {page === 'vault' && (
@@ -1535,6 +1545,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           onEdit={editEntry}
           onStartCreate={startCreate}
           onStartCreateFolder={() => { setPaletteOpen(false); openCreateFolderDialog(); }}
+          onStartExport={() => { setPaletteOpen(false); navigate('/next/settings'); setExportDialogOpen(true); }}
           onClose={() => setPaletteOpen(false)}
         />
       )}

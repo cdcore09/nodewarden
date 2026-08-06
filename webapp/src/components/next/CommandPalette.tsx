@@ -49,6 +49,7 @@ interface CommandPaletteProps {
   onEdit: (entry: SearchEntry) => void;
   onStartCreate: (type: number, name: string) => void;
   onStartCreateFolder: () => void;
+  onStartExport: () => void;
   onClose: () => void;
 }
 
@@ -88,6 +89,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     props.onClose();
     if (command.id === 'new-item') props.onStartCreate(1, '');
     else if (command.id === 'new-folder') props.onStartCreateFolder();
+    else if (command.id === 'export-vault') props.onStartExport();
     else command.run(props.commandContext);
   };
 

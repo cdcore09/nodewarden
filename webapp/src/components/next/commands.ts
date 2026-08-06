@@ -58,6 +58,14 @@ export function listCommands(): NextCommand[] {
     { id: 'sends', label: 'Sends', run: (ctx) => ctx.navigate('/next/sends') },
     { id: 'organizations', label: 'Organizations', hint: 'members · collections', run: (ctx) => ctx.navigate('/next/orgs') },
     { id: 'import', label: 'Import', hint: 'from another password manager', run: (ctx) => ctx.navigate('/next/import') },
+    {
+      id: 'export-vault',
+      label: 'Export vault…',
+      hint: 'download your vault data',
+      // No-op: the palette (CommandPalette.tsx runCommand) intercepts this id
+      // and opens the Next settings export dialog directly, mirroring 'new-folder'.
+      run() {},
+    },
     { id: 'backup', label: 'Backup center', run: (ctx) => ctx.navigate('/backup') },
     { id: 'settings', label: 'Settings', run: (ctx) => ctx.navigate('/next/settings') },
     { id: 'devices', label: 'Device management', run: (ctx) => ctx.navigate('/settings/security/device-management') },
