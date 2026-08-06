@@ -155,7 +155,8 @@ export default function NextOrgsPage(props: NextOrgsPageProps) {
         publicKey: keys.publicKey,
         encryptedPrivateKey: keys.encryptedPrivateKey,
       };
-      await props.onCreateOrganization(input);
+      const { id } = await props.onCreateOrganization(input);
+      setOrgId(id);
 
       props.onNotify('success', t('txt_org_created', { name: trimmedName }));
       setCreateOpen(false);
@@ -182,7 +183,11 @@ export default function NextOrgsPage(props: NextOrgsPageProps) {
           maxLength={128}
           value={createName}
           placeholder={t('txt_org_name_placeholder')}
+          disabled={createSubmitting}
           onInput={(e) => setCreateName((e.currentTarget as HTMLInputElement).value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void submitCreateOrganization(); }
+          }}
         />
       </label>
       {createError && <div className="nx-help warn">{createError}</div>}
@@ -192,7 +197,7 @@ export default function NextOrgsPage(props: NextOrgsPageProps) {
         </button>
         <button type="button" className="nx-btn" disabled={createSubmitting || !createName.trim()}
           onClick={() => void submitCreateOrganization()}>
-          {createSubmitting ? t('txt_org_creating') : t('txt_create')}
+          {createSubmitting ? t('txt_org_creating') : t('txt_create')} <span className="nx-kbd on-fill">↵</span>
         </button>
       </div>
     </Dialog>
