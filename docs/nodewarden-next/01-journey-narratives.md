@@ -11,6 +11,18 @@
 
 ---
 
+## State as of 2026-08-06
+
+This is a Phase 1 design artifact (dated 2026-08-03), written when only slices 1–3 existed. Slices 4–14 shipped since. The journey walkthroughs and their "Non-goals" callouts below are the acceptance tests slice 2/3 had to satisfy at the time — read them as history, not as today's feature inventory. Corrections:
+
+- **Stale "stock-only" scoping corrected:** orgs, Sends, TOTP, security audit, generator, import, and settings are now native Next surfaces (slices 5–12) — no longer command-mode jumps out to the classic UI. See `02-ia-interaction-model.md`'s matching changelog for the corrected surface map.
+- **Settled architecture:** classic is the permanent, upstream-maintained admin console for the long tail Next deliberately does not port — exactly the pages `NextSettingsPage.tsx`'s "Security & account" section links out to: master password & hint, two-step login (TOTP/YubiKey/passkeys), API keys & recovery code, authorized devices, domain rules, backup center, admin panel, log center. Next is now the default daily driver for everything else.
+- **Slice 13 (vault completeness):** bulk operations (select, move, archive/unarchive, restore, trash, delete-forever), folder CRUD (create/rename/delete), and vault export shipped natively in Next. This supersedes the folder-management/bulk-operations non-goals recorded in Journey 1 below.
+- **Slice 14:** Sends parity (notes, expiration days, max access count, disabled toggle) and create-organization shipped natively in Next.
+- **Default flip:** `nodewarden.ui.v2` now defaults to `'v2'` (Next) for any absent or unrecognized stored value. Opting out to classic persists the literal `'v1'` in storage (previously the key was removed on opt-out). `?classic=1` remains a query-string bypass. Next stays English-only; non-English users see a locale note in Next Settings pointing them at the classic interface.
+
+---
+
 ## Journey 1 — Retrieval (the star): mid-login, need the credential *now*
 
 **Persona moment:** I'm on `app.fastmail.com/login` in another tab. The login form is staring at me. Every second here is a second I'm not doing the thing I actually opened the browser for.
@@ -133,7 +145,7 @@
 - [ ] Org switch that resets selection says so (or preserves compatible selections).
 - [ ] Full keyboard operability retained (focus, Enter, Esc — already the stock dialog's strength; do not regress it).
 
-**Non-goals:** bulk share, share-from-list-row, org/collection management surfaces (stock UI keeps them).
+**Non-goals:** bulk share, share-from-list-row, collection management surfaces. (Org management itself now lives natively in Next — see the 2026-08-06 changelog above; this non-goal originally covered orgs too, but that has since landed.)
 
 ---
 

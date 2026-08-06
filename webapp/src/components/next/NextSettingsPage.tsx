@@ -22,6 +22,7 @@ const STR = {
   interface: 'Interface',
   interfaceHelp: 'Switching to Classic swaps the whole app back to the stock interface from the next page load. This is the only place that switch lives.',
   interfaces: { v1: 'Classic', v2: 'NodeWarden Next' } as Record<UiVersion, string>,
+  localeNote: 'NodeWarden Next is English-only for now. The classic interface below is available in your selected language.',
   session: 'Session',
   lockTimeout: 'Lock after inactivity',
   timeoutAction: 'When the timeout hits',
@@ -240,6 +241,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
             ))}
           </select>
         </Row>
+        {locale !== 'en' && <div className="nx-help">{STR.localeNote}</div>}
         <Row label={STR.skin} help={STR.skinHelp}>
           <select
             className="nx-input"

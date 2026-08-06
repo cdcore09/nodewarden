@@ -7,6 +7,18 @@
 
 ---
 
+## State as of 2026-08-06
+
+This is a Phase 2 design artifact (dated 2026-08-03), written when only slices 1–3 existed. Slices 4–14 shipped since; the surface map and non-goals below describe the plan at that point, not today's ownership. Corrections:
+
+- **Stale "stock-only" scoping corrected:** orgs, Sends, TOTP, security audit, generator, import, and settings are now native Next surfaces (slices 5–12), not command-mode jumps to the classic UI. §2's surface map and §6's command-mode description below predate this and are annotated in place.
+- **Settled architecture:** classic is the permanent, upstream-maintained admin console for the long tail Next deliberately does not port — exactly the pages `NextSettingsPage.tsx`'s "Security & account" section links out to: master password & hint, two-step login (TOTP/YubiKey/passkeys), API keys & recovery code, authorized devices, domain rules, backup center, admin panel, log center. Next is now the default daily driver for everything else.
+- **Slice 13 (vault completeness):** bulk operations, folder CRUD, and vault export shipped natively in Next, superseding §4's "deliberately not rebuilt" list below.
+- **Slice 14:** Sends parity and create-organization shipped natively in Next.
+- **Default flip:** `nodewarden.ui.v2` now defaults to `'v2'` (Next) for any absent or unrecognized stored value. Opting out to classic persists the literal `'v1'` in storage (previously the key was removed on opt-out). `?classic=1` remains a query-string bypass. Next stays English-only; non-English users see a locale note in Next Settings pointing them at the classic interface.
+
+---
+
 ## 1. The organizing idea
 
 The stock UI is a **hierarchical admin panel** (sidebar → filter → list → detail) where search is a field bolted onto a toolbar. Next inverts this: **the search surface *is* the shell.** Everything else — browsing, commands, admin — is reached *through* it or deliberately parked outside it in the stock UI.
@@ -28,15 +40,17 @@ This is a hub-and-spoke IA where the hub is a live query, not a dashboard:
        └───┬───────────────┬───────────────┬───────────────┘
            ▼               ▼               ▼
      ITEM DETAIL      EDITOR (new/edit)   AUDIT SURFACE
-     (slice 3)        (slice 3, one       (later slice,
-     side panel /      component serves    stock page until
-     takeover          J2 + J3 + J5)       then)
+     (slice 3)        (slice 3, one       (slice 5,
+     side panel /      component serves    native Next —
+     takeover          J2 + J3 + J5)       see 2026-08-06)
            │
            ▼
      SHARE DIALOG (Next-styled, J4)
 
      Command mode ("​>") ──────────► STOCK UI surfaces
-     (admin, orgs, settings, import, backup, sends, logs…)
+     (admin, backup, logs, help, domain rules, device/2FA/API-key
+     ceremonies — see the 2026-08-06 changelog: orgs/settings/import/
+     sends are native Next now, no longer this arrow's targets)
 ```
 
 Browsing does not disappear; it collapses into **scope chips + a browse panel** (§4). Admin does not disappear; it lives behind **command mode** and never occupies retrieval-surface chrome (§6).
@@ -55,12 +69,14 @@ Stock route inventory (from `AppMainRoutes.tsx:224-561`): `/vault`, `/vault/totp
 | Item editor (login type, full) | **Next** (slice 3) | J2, J3, J5 — one component, three journeys |
 | Item editor (other 7 types) | **Next**, functional V2 form; polish later | J2 non-goal boundary |
 | Share dialog | **Next** (slice 3 or 3.5) | J4 + the design-system evidence on #16 |
-| Security audit + fix loop | **Next**, later slice; until then command-mode jump to stock page | J5; slice discipline |
-| Generator | **Inline component in Next editor**; standalone `/generator` page stays stock | J2/J5 need it inline; page has separate uses |
-| Sends, TOTP page, organizations mgmt, admin, settings, import, backup, logs, domain rules, help | **Stock**, reached via command mode | issue non-goals: admin long tail |
+| Security audit + fix loop | **Next** (shipped slice 5, `NextAuditPage.tsx`) | J5 |
+| Generator | **Inline component in Next editor**, *and* a standalone native Next generator page (shipped slice 8, `NextGeneratorPage.tsx`) — the classic `/generator` page is no longer the only standalone option | J2/J5 need it inline; page has separate uses |
+| Sends, TOTP page, organizations mgmt, settings, import | **Next** (shipped slices 5–14 — see the 2026-08-06 changelog above) | superseded; these were originally scoped as stock-only |
+| Admin, backup, logs, domain rules, master password/2FA/API keys/devices | **Stock**, permanently — the settled admin console, reached via the Settings escape hatches | settled architecture: admin long tail stays upstream |
+| Help | **Stock**, reached via command mode (no native Next page) | unchanged from original scoping |
 | Onboarding (register → first item) | **Next** (rides slices 1+2+3) | J6 |
 
-**Escape hatch (standing decision):** stock UI stays one toggle away. In Next: command `>classic ui` plus a persistent low-key affordance (footer of the app menu). The `nodewarden.ui.v2` flag flips both ways instantly.
+**Escape hatch (standing decision):** stock UI stays one toggle away. The switch to classic lives in Next Settings → Interface — the only in-Next place it lives — plus the `?classic=1` URL bypass and direct classic-route URLs. The `nodewarden.ui.v2` flag flips both ways instantly. (As of the 2026-08-06 default flip, Next is the default read on an absent/unrecognized flag value; opting out to classic now persists the literal `'v1'` rather than clearing the key — see the changelog above.)
 
 ---
 
@@ -79,7 +95,7 @@ Stock route inventory (from `AppMainRoutes.tsx:224-561`): `/vault`, `/vault/totp
 | Input | Result |
 |---|---|
 | plain text | Vault-global fuzzy-ish match (name, username, **all** URIs, folder name; fixes stock index gaps at `VaultPage.tsx:324-338`). Never scoped by residual state — scoping exists only as visible chips. |
-| `>` prefix | **Command mode**: commands fuzzy-matched (`>new card`, `>audit`, `>settings`, `>import`, `>lock`, `>classic ui`, `>admin`, `>organizations`, `>sends`, `>generator`…). VS Code convention; keeps item results and commands from polluting each other. |
+| `>` prefix | **Command mode**: commands fuzzy-matched (`>new card`, `>audit`, `>settings`, `>import`, `>lock`, `>admin`, `>organizations`, `>sends`, `>generator`…). VS Code convention; keeps item results and commands from polluting each other. (No `>classic ui` command was ever built — superseded, see the 2026-08-06 changelog; the switch lives in Settings → Interface.) |
 | no matches | The result list offers **“Create login ‘‹query›’”** — Enter opens the editor with the name prefilled (J2 shortcut; also converts every failed retrieval into a capture opportunity). |
 | scope chip active | Chip renders *inside* the search bar (e.g. `[folder: Work] fas`). Added via browse panel or `in:`/`type:` tokens; removed with Backspace at query start. Visible = never silent (J1 criterion). |
 
@@ -96,7 +112,7 @@ Browsing is the fallback mode (issue thesis), so it gets exactly two affordances
 
 Depth check (IA hygiene): maximum navigation depth anywhere in Next is **2** (surface → panel/detail). The stock sidebar's tree stays available in stock for whoever wants it.
 
-Deliberately *not* rebuilt: folder management (create/rename/delete), bulk selection/operations, duplicates resolution — command mode jumps to stock for these.
+Deliberately *not* rebuilt: duplicates resolution — command mode jumps to stock for this. (Folder management (create/rename/delete) and bulk selection/operations shipped natively in slice 13, superseding their original listing here as non-goals — see the 2026-08-06 changelog above.)
 
 ---
 
@@ -142,7 +158,7 @@ Same accelerators as above act on the open item (`⌘U`, `⌘O`, `⌘E`, `⌘S`,
 | `⌘Enter` (alias `⌘S`) | Save. On save: return to where you came from (results with highlight, or audit findings list) with the saved item selected. | J2, J3, J5 |
 | `Esc` | Cancel; if dirty, an inline guard (Enter = discard, Esc = keep editing) | J3 |
 
-### Audit surface (when its slice lands)
+### Audit surface (shipped slice 5, native Next — see the 2026-08-06 changelog)
 
 Findings list uses the identical list mechanics: arrows, `Enter` = open fix (editor, password focused, generated candidate offered), save returns to the findings list with position preserved and the finding locally resolved. Fix loop = `Enter · ⌘G · ⌘Enter` — the 3 keystrokes J5 counted.
 
@@ -156,8 +172,8 @@ Findings list uses the identical list mechanics: arrows, `Enter` = open fix (edi
 
 ## 6. Where org/admin surfaces live (so retrieval pays no tax)
 
-- **Zero admin chrome on the retrieval surface.** No sidebar entries, no toolbar buttons, no nav tabs. The only persistent non-search UI: the hint bar and one unobtrusive **app menu** button (top corner) containing: account/lock/logout, theme/skin, switch to classic UI, and links into stock surfaces — the same list command mode exposes, for mouse users.
-- **Command mode is the front door to everything else** (`>settings`, `>admin`, `>organizations`, `>import`, `>backup`, `>sends`, `>logs`, `>generator`, `>audit`). Jumping to a stock surface is a normal navigation; `⌘K` in stock is *not* claimed (stock stays untouched per merge-safety) — returning to Next is via the vault nav link, which the shell hook points at the Next surface while the flag is on.
+- **Zero admin chrome on the retrieval surface.** No sidebar entries, no toolbar buttons, no nav tabs. The only persistent non-search UI: the hint bar and one unobtrusive **app menu** button (top corner) containing: account/lock/logout, theme/skin, and links into stock surfaces — the same list command mode exposes, for mouse users. (The switch to classic UI is not in this menu — it lives in Next Settings → Interface, plus the `?classic=1` bypass; see the 2026-08-06 changelog.)
+- **Command mode is the front door to everything else.** As of the 2026-08-06 changelog above, `>settings`, `>organizations`, `>import`, `>sends`, `>generator`, and `>audit` now open native Next surfaces rather than jumping to stock. Genuine jumps to the classic admin console remain `>admin`, `>backup`, `>logs`, `>help`, plus the security escape hatches inside Next Settings (master password, 2FA, API keys, devices, domain rules). Jumping to a stock surface is a normal navigation; `⌘K` in stock is *not* claimed (stock stays untouched per merge-safety) — returning to Next is via the vault nav link, which the shell hook points at the Next surface while the flag is on.
 - **Org-ness inside Next appears exactly twice:** the org badge on shared items (detail + result row, J4) and the share dialog. Collection browsing is a browse-panel scope, not a persistent tree.
 
 ---
@@ -192,7 +208,7 @@ One deliberate amendment to a Phase 1 count: J2's "⌘N" is impossible in a brow
 3. **Result row anatomy** — icon, name, username, org badge, TOTP presence/countdown, matched-field indicator; what the "copied ✓ (clears in 28s)" state looks like.
 4. **`⌘O`/`⌘G`/`⌘S` mnemonics under i18n** — accelerators stay fixed across locales (muscle memory > mnemonic), but hint-bar labels localize; verify no locale renders the hint bar too wide.
 5. **Chip syntax** (`in:`, `type:`) — power-user affordance; typed tokens may slip to a later slice, browse-panel chips are the slice-2 floor.
-6. Exact command list for `>` mode at slice 2 (minimum: new ×8 types, audit, generator, settings, import, classic ui, lock, logout).
+6. Exact command list for `>` mode at slice 2 (minimum: new ×8 types, audit, generator, settings, import, lock, logout). (`classic ui` dropped — superseded, see the 2026-08-06 changelog; the switch lives in Settings → Interface.)
 
 ## Phase 3 next step (per plan of record)
 
