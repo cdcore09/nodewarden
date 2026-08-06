@@ -820,7 +820,9 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     setConfirm({ title, message, confirmLabel, run });
   };
 
-  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || !!folderMenu || sortMenuOpen || newMenuOpen || sheetOpen;
+  const overlaysOpen =
+    paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || !!folderMenu || sortMenuOpen || newMenuOpen || sheetOpen ||
+    !!folderDialog || bulkMoveOpen || !!moveEntryId || exportDialogOpen;
 
   // Dashboard keyboard model.
   useEffect(() => {
@@ -832,7 +834,12 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       if (meta && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setRowMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
-        if (!editorOpen && !gate && !confirm) { setPaletteSeed(''); setPaletteOpen((open) => !open); }
+        // Palette toggle stays keyed off the individual flags (not overlaysOpen) so it can still
+        // close itself when it's the only thing open — but it must not steal focus or pop underneath
+        // any of the z-35 dialogs below, so those are excluded here too.
+        if (!editorOpen && !gate && !confirm && !folderDialog && !bulkMoveOpen && !moveEntryId && !exportDialogOpen) {
+          setPaletteSeed(''); setPaletteOpen((open) => !open);
+        }
         return;
       }
       if (overlaysOpen) {
@@ -880,7 +887,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, folderMenu, sortMenuOpen, newMenuOpen, selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen, selection]);
+  }, [
+    overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, folderMenu, sortMenuOpen, newMenuOpen,
+    folderDialog, bulkMoveOpen, moveEntryId, exportDialogOpen,
+    selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen, selection,
+  ]);
 
   useEffect(() => {
     if (selectedIndex < 0) return;
@@ -949,44 +960,42 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           )}
         </div>
 
-        {props.folders.length > 0 && (
-          <div className="rail-group">
-            <div className="rail-head">
-              {STR.folders}
-              <button type="button" className="nx-iconbtn" aria-label={STR.newFolder} title={STR.newFolder} onClick={openCreateFolderDialog}>
-                <Plus size={12} />
-              </button>
-            </div>
-            {props.folders.map((folder) => {
-              const name = folder.decName || folder.name || '';
-              return (
-                <div key={`fw${folder.id}`} className="rail-folder-row">
-                  {railLink(
-                    `f${folder.id}`,
-                    name,
-                    <FolderIcon size={14} />,
-                    { kind: 'folder', folderId: folder.id, label: name },
-                    counts.byFolder.get(folder.id),
-                    (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
-                  )}
-                  <button
-                    type="button"
-                    className="nx-iconbtn rail-folder-more"
-                    aria-label={STR.folderOptions}
-                    title={STR.folderOptions}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setFolderMenu({ folderId: folder.id, name, x: rect.right, y: rect.bottom + 4 });
-                    }}
-                  >
-                    <MoreHorizontal size={12} />
-                  </button>
-                </div>
-              );
-            })}
+        <div className="rail-group">
+          <div className="rail-head">
+            {STR.folders}
+            <button type="button" className="nx-iconbtn" aria-label={STR.newFolder} title={STR.newFolder} onClick={openCreateFolderDialog}>
+              <Plus size={12} />
+            </button>
           </div>
-        )}
+          {props.folders.length > 0 && props.folders.map((folder) => {
+            const name = folder.decName || folder.name || '';
+            return (
+              <div key={`fw${folder.id}`} className="rail-folder-row">
+                {railLink(
+                  `f${folder.id}`,
+                  name,
+                  <FolderIcon size={14} />,
+                  { kind: 'folder', folderId: folder.id, label: name },
+                  counts.byFolder.get(folder.id),
+                  (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
+                )}
+                <button
+                  type="button"
+                  className="nx-iconbtn rail-folder-more"
+                  aria-label={STR.folderOptions}
+                  title={STR.folderOptions}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setFolderMenu({ folderId: folder.id, name, x: rect.right, y: rect.bottom + 4 });
+                  }}
+                >
+                  <MoreHorizontal size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
 
         {props.shareOrganizations.length > 0 && (
           <div className="rail-group">
