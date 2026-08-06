@@ -6,12 +6,13 @@
 // remove dialog that spells out what is NOT revoked. Data flows through
 // the same hooks as the classic page — no duplicated crypto.
 import { useMemo, useRef, useState } from 'preact/hooks';
-import { UserPlus, Users, FolderLock, ShieldQuestion } from 'lucide-preact';
+import { Plus, UserPlus, Users, FolderLock, ShieldQuestion } from 'lucide-preact';
 import { useOrgMemberActions } from '@/hooks/useOrgMemberActions';
 import { useOrgCollectionActions } from '@/hooks/useOrgCollectionActions';
-import { getUserPublicKey, ORGANIZATION_TYPE_OWNER, type OrgMember, type OrgCollectionGrant } from '@/lib/api/organizations';
+import { getUserPublicKey, ORGANIZATION_TYPE_OWNER, type OrgMember, type OrgCollectionGrant, type CreateOrganizationInput } from '@/lib/api/organizations';
 import { getFingerprintPhrase } from '@/lib/api/auth-requests';
-import { base64ToBytes } from '@/lib/crypto';
+import { base64ToBytes, WebCryptoUnavailableError } from '@/lib/crypto';
+import { generateOrgKeys } from '@/lib/org-crypto';
 import { useDialogFocus } from './useDialogFocus';
 import type { AuthedFetch } from '@/lib/api/shared';
 import { t } from '@/lib/i18n';
@@ -73,6 +74,7 @@ const STR = {
   itemCount: (n: number) => `${n} item${n === 1 ? '' : 's'}`,
   memberCount: (n: number) => `${n} member${n === 1 ? '' : 's'}`,
   collectionCount: (n: number) => `${n} collection${n === 1 ? '' : 's'}`,
+  noPublicKey: 'Your account has no public key yet',
 };
 
 interface NextOrgsPageProps {
@@ -81,6 +83,8 @@ interface NextOrgsPageProps {
   orgKeys: Record<string, Uint8Array>;
   orgItemCounts: Map<string, number>;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
+  onCreateOrganization: (input: CreateOrganizationInput) => Promise<{ id: string }>;
+  profilePublicKey: string | null;
 }
 
 function Dialog(props: { label: string; onClose?: () => void; children: preact.ComponentChildren }) {
@@ -109,10 +113,117 @@ export default function NextOrgsPage(props: NextOrgsPageProps) {
   const [orgId, setOrgId] = useState(props.organizations[0]?.id || '');
   const org = props.organizations.find((o) => o.id === orgId) || null;
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const createDisabled = !props.profilePublicKey;
+
+  const openCreateDialog = () => {
+    setCreateName('');
+    setCreateError('');
+    setCreateOpen(true);
+  };
+
+  const closeCreateDialog = () => {
+    if (createSubmitting) return;
+    setCreateOpen(false);
+    setCreateName('');
+    setCreateError('');
+  };
+
+  // Mirrors classic OrganizationsPage.tsx's submitCreateOrganization: read
+  // the account's RSA public key, generate a fresh org key set wrapped to
+  // it, and hand the four fields the server expects to onCreateOrganization.
+  async function submitCreateOrganization(): Promise<void> {
+    const trimmedName = createName.trim();
+    if (!trimmedName || createSubmitting) return;
+
+    setCreateSubmitting(true);
+    setCreateError('');
+    try {
+      const userPublicKey = props.profilePublicKey;
+      if (!userPublicKey) {
+        throw new Error(t('txt_org_missing_encryption_key'));
+      }
+
+      const keys = await generateOrgKeys(userPublicKey);
+      const input: CreateOrganizationInput = {
+        name: trimmedName,
+        key: keys.wrappedKeyForOwner,
+        publicKey: keys.publicKey,
+        encryptedPrivateKey: keys.encryptedPrivateKey,
+      };
+      const { id } = await props.onCreateOrganization(input);
+      setOrgId(id);
+
+      props.onNotify('success', t('txt_org_created', { name: trimmedName }));
+      setCreateOpen(false);
+      setCreateName('');
+    } catch (error) {
+      const message = error instanceof WebCryptoUnavailableError
+        ? t('txt_web_crypto_unavailable')
+        : error instanceof Error && error.message ? error.message : t('txt_org_create_failed');
+      setCreateError(message);
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
+  const createDialog = createOpen && (
+    <Dialog label={t('txt_org_dialog_title')} onClose={closeCreateDialog}>
+      <h3>{t('txt_org_dialog_title')}</h3>
+      <div className="nx-help">{t('txt_org_dialog_message')}</div>
+      <label className="nx-field">
+        <span className="nx-overline">{t('txt_name')}</span>
+        <input
+          className="nx-input"
+          type="text"
+          maxLength={128}
+          value={createName}
+          placeholder={t('txt_org_name_placeholder')}
+          disabled={createSubmitting}
+          onInput={(e) => setCreateName((e.currentTarget as HTMLInputElement).value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void submitCreateOrganization(); }
+          }}
+        />
+      </label>
+      {createError && <div className="nx-help warn">{createError}</div>}
+      <div className="dfoot">
+        <button type="button" className="nx-btn ghost" disabled={createSubmitting} onClick={closeCreateDialog}>
+          {t('txt_cancel')} <span className="nx-kbd">esc</span>
+        </button>
+        <button type="button" className="nx-btn" disabled={createSubmitting || !createName.trim()}
+          onClick={() => void submitCreateOrganization()}>
+          {createSubmitting ? t('txt_org_creating') : t('txt_create')} <span className="nx-kbd on-fill">↵</span>
+        </button>
+      </div>
+    </Dialog>
+  );
+
+  const newOrgButton = (
+    <button
+      type="button"
+      className="nx-btn sm org-new"
+      disabled={createDisabled}
+      title={createDisabled ? STR.noPublicKey : undefined}
+      onClick={openCreateDialog}
+    >
+      <Plus size={13} /> {t('txt_org_new_button')}
+    </button>
+  );
+
   if (!org) {
     return (
       <div className="nx-list nx-orgs">
+        <div className="org-head">
+          <h2 className="org-name">{t('txt_org_page_title')}</h2>
+          {newOrgButton}
+        </div>
         <div className="nx-empty"><ShieldQuestion size={20} /> {STR.intro}</div>
+        {createDialog}
       </div>
     );
   }
@@ -127,6 +238,8 @@ export default function NextOrgsPage(props: NextOrgsPageProps) {
       orgKeys={props.orgKeys}
       itemCount={props.orgItemCounts.get(org.id) || 0}
       onNotify={props.onNotify}
+      newOrgButton={newOrgButton}
+      createDialog={createDialog}
     />
   );
 }
@@ -139,6 +252,8 @@ function OrgDetail(props: {
   orgKeys: Record<string, Uint8Array>;
   itemCount: number;
   onNotify: (type: 'success' | 'error' | 'warning', text: string) => void;
+  newOrgButton: preact.ComponentChildren;
+  createDialog: preact.ComponentChildren;
 }) {
   const orgId = props.org.id;
   const memberActions = useOrgMemberActions({
@@ -236,6 +351,7 @@ function OrgDetail(props: {
         <span className="org-meta nx-data">
           {STR.memberCount(memberActions.members.length)} · {STR.collectionCount(collectionActions.collections.length)} · {STR.itemCount(props.itemCount)}
         </span>
+        {props.newOrgButton}
       </div>
 
       <details className="nx-details org-how">
@@ -494,6 +610,8 @@ function OrgDetail(props: {
           </div>
         </Dialog>
       )}
+
+      {props.createDialog}
     </div>
   );
 }

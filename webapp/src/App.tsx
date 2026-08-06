@@ -2584,6 +2584,8 @@ export default function App() {
           onExport={effectiveMainRoutesProps.onExport}
           authedFetch={IS_DEMO_MODE ? demoOrgFetch : authedFetch}
           orgKeys={IS_DEMO_MODE ? DEMO_ORG_KEYS : orgKeysCache}
+          onCreateOrganization={effectiveMainRoutesProps.onCreateOrganization}
+          profilePublicKey={profile?.publicKey || null}
         />
         {renderPassiveOverlays()}
       </>

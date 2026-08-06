@@ -18,6 +18,7 @@ import NextSendsPage from './NextSendsPage';
 import NextSettingsPage from './NextSettingsPage';
 import NextImportPage from './NextImportPage';
 import NextOrgsPage from './NextOrgsPage';
+import type { CreateOrganizationInput } from '@/lib/api/organizations';
 import type { CiphersImportPayload } from '@/lib/api/vault';
 import type { AuthedFetch } from '@/lib/api/shared';
 import type { ImportResultSummary } from '@/components/ImportPage';
@@ -161,6 +162,8 @@ interface VaultNextPageProps {
   onExport: (request: ExportRequest) => Promise<void>;
   authedFetch: AuthedFetch;
   orgKeys: Record<string, Uint8Array>;
+  onCreateOrganization: (input: CreateOrganizationInput) => Promise<{ id: string }>;
+  profilePublicKey: string | null;
 }
 
 type CopyKind = PaletteCopyKind;
@@ -1229,6 +1232,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             orgKeys={props.orgKeys}
             orgItemCounts={counts.byOrg}
             onNotify={props.onNotify}
+            onCreateOrganization={props.onCreateOrganization}
+            profilePublicKey={props.profilePublicKey}
           />
         )}
         {page === 'import' && (

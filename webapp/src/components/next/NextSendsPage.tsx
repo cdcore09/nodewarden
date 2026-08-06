@@ -27,14 +27,29 @@ const STR = {
   text: 'Text',
   file: 'File',
   deletionDays: 'Delete after (days)',
+  expirationDays: 'Expire after (days)',
+  maxAccessCount: 'Max views',
+  never: 'Never',
+  unlimited: 'Unlimited',
+  notes: 'Notes',
+  disabledField: 'Disabled',
   password: 'Password (optional)',
   save: 'Save',
   saving: 'Saving…',
   cancel: 'Cancel',
-  expires: (d: string) => `expires ${d}`,
-  views: (n: number) => `${n} views`,
+  deletes: (d: string) => `deletes ${d}`,
+  expiresAt: (d: string) => `expires ${d}`,
+  views: (n: number, max?: number | null) => (max != null ? `${n}/${max} views` : `${n} views`),
   disabled: 'disabled',
 };
+
+function daysFromNow(iso: string | null | undefined, fallback: number): string {
+  if (!iso) return String(fallback);
+  const time = new Date(iso).getTime();
+  if (!Number.isFinite(time)) return String(fallback);
+  const days = Math.ceil((time - Date.now()) / (24 * 60 * 60 * 1000));
+  return String(Math.max(days, 0));
+}
 
 function emptyDraft(type: 'text' | 'file'): SendDraft {
   return {
@@ -87,7 +102,11 @@ export default function NextSendsPage(props: NextSendsPageProps) {
       ...emptyDraft(send.type === 2 ? 'file' : 'text'),
       id: send.id,
       name: send.decName || '',
+      notes: send.decNotes || '',
       text: (send.text as { decText?: string } | null)?.decText || '',
+      deletionDays: daysFromNow(send.deletionDate, 7),
+      expirationDays: send.expirationDate ? daysFromNow(send.expirationDate, 0) : '',
+      maxAccessCount: send.maxAccessCount !== null && send.maxAccessCount !== undefined ? String(send.maxAccessCount) : '',
       hasPassword: !!send.password,
       disabled: !!send.disabled,
     });
@@ -140,8 +159,11 @@ export default function NextSendsPage(props: NextSendsPageProps) {
           ) : (
             <div className="nx-help">{STR.file}: {draft.file?.name || '—'}</div>
           )}
-          <details className="nx-details" open={!!draft.password || draft.deletionDays !== '7'}>
-            <summary>Options<span style={{ color: 'var(--nx-ink-faint)' }}>expiry · password</span></summary>
+          <details className="nx-details" open={
+            !!draft.password || draft.deletionDays !== '7' || !!draft.expirationDays ||
+            !!draft.maxAccessCount || !!draft.notes || draft.disabled
+          }>
+            <summary>Options<span style={{ color: 'var(--nx-ink-faint)' }}>expiry · views · notes · password</span></summary>
             <div className="details-body">
           <div className="erow">
             <label className="nx-field" style={{ flex: 1 }}>
@@ -153,6 +175,30 @@ export default function NextSendsPage(props: NextSendsPageProps) {
               <span className="nx-overline">{STR.password}</span>
               <input className="nx-input nx-data" type="password" value={draft.password}
                 onInput={(e) => setDraft({ ...draft, password: (e.currentTarget as HTMLInputElement).value })} />
+            </label>
+          </div>
+          <div className="erow">
+            <label className="nx-field" style={{ flex: 1 }}>
+              <span className="nx-overline">{STR.expirationDays}</span>
+              <input className="nx-input nx-data" type="number" min="0" placeholder={STR.never} value={draft.expirationDays}
+                onInput={(e) => setDraft({ ...draft, expirationDays: (e.currentTarget as HTMLInputElement).value })} />
+            </label>
+            <label className="nx-field" style={{ flex: 1 }}>
+              <span className="nx-overline">{STR.maxAccessCount}</span>
+              <input className="nx-input nx-data" type="number" min="0" placeholder={STR.unlimited} value={draft.maxAccessCount}
+                onInput={(e) => setDraft({ ...draft, maxAccessCount: (e.currentTarget as HTMLInputElement).value })} />
+            </label>
+          </div>
+          <label className="nx-field">
+            <span className="nx-overline">{STR.notes}</span>
+            <textarea className="nx-input" value={draft.notes}
+              onInput={(e) => setDraft({ ...draft, notes: (e.currentTarget as HTMLTextAreaElement).value })} />
+          </label>
+          <div className="echecks">
+            <label>
+              <input type="checkbox" checked={draft.disabled}
+                onInput={(e) => setDraft({ ...draft, disabled: (e.currentTarget as HTMLInputElement).checked })} />
+              {STR.disabledField}
             </label>
           </div>
             </div>
@@ -187,16 +233,18 @@ export default function NextSendsPage(props: NextSendsPageProps) {
       )}
 
       <div className="sends-cards">
-      {props.sends.map((send) => (
+      {props.sends.map((send) => {
+        const sub: string[] = [];
+        if (send.expirationDate) sub.push(STR.expiresAt(new Date(send.expirationDate).toLocaleDateString()));
+        if (send.deletionDate) sub.push(STR.deletes(new Date(send.deletionDate).toLocaleDateString()));
+        if (typeof send.accessCount === 'number') sub.push(STR.views(send.accessCount, send.maxAccessCount ?? null));
+        return (
         <div key={send.id} className="send-card">
           <div className="card-id">
             <span className="ico">{send.type === 2 ? <FileText size={14} /> : <Link2 size={14} />}</span>
             <span className="who">
               <span className="title">{send.decName || ''}</span>
-              <span className="sub nx-data">
-                {send.deletionDate ? STR.expires(new Date(send.deletionDate).toLocaleDateString()) : ''}
-                {typeof send.accessCount === 'number' ? ` · ${STR.views(send.accessCount)}` : ''}
-              </span>
+              <span className="sub nx-data">{sub.join(' · ')}</span>
             </span>
             {send.disabled && <span className="nx-badge warn">{STR.disabled}</span>}
           </div>
@@ -223,7 +271,8 @@ export default function NextSendsPage(props: NextSendsPageProps) {
             </button>
           </div>
         </div>
-      ))}
+        );
+      })}
       </div>
       </div>
       </div>
