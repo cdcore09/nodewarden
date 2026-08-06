@@ -105,7 +105,7 @@ export default function NextSendsPage(props: NextSendsPageProps) {
       notes: send.decNotes || '',
       text: (send.text as { decText?: string } | null)?.decText || '',
       deletionDays: daysFromNow(send.deletionDate, 7),
-      expirationDays: daysFromNow(send.expirationDate, 0),
+      expirationDays: send.expirationDate ? daysFromNow(send.expirationDate, 0) : '',
       maxAccessCount: send.maxAccessCount !== null && send.maxAccessCount !== undefined ? String(send.maxAccessCount) : '',
       hasPassword: !!send.password,
       disabled: !!send.disabled,
