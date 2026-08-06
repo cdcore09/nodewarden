@@ -132,6 +132,16 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
   const exportNeedsFilePassword = exportNeedsMode && encryptedJsonMode === 'password';
   const exportIsZip = EXPORT_ZIP_FORMATS.has(exportFormat);
 
+  // Sensitive values only — cleared on open AND on every path that leaves
+  // the dialog (cancel/Escape/success), so a typed master password never
+  // lingers in plaintext component state after the dialog is gone.
+  const resetExportSecrets = () => {
+    setFilePassword('');
+    setZipPassword('');
+    setMasterPassword('');
+    setExportError('');
+  };
+
   // Reset the form fresh every time the dialog opens (covers both the
   // in-page "Export…" button and the palette command reaching in from
   // outside — see VaultNextPage's exportDialogOpen/onExportDialogOpenChange).
@@ -139,14 +149,12 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
     if (!props.exportDialogOpen) return;
     setExportFormat('bitwarden_json');
     setEncryptedJsonMode('account');
-    setFilePassword('');
-    setZipPassword('');
-    setMasterPassword('');
-    setExportError('');
+    resetExportSecrets();
   }, [props.exportDialogOpen]);
 
   const closeExportDialog = () => {
     if (exportSubmitting) return;
+    resetExportSecrets();
     props.onExportDialogOpenChange(false);
   };
 
@@ -170,6 +178,7 @@ export default function NextSettingsPage(props: NextSettingsPageProps) {
         zipPassword: exportIsZip ? zipPassword.trim() : undefined,
         masterPassword: masterPassword.trim(),
       });
+      resetExportSecrets();
       props.onExportDialogOpenChange(false);
       props.onNotify('success', STR.exportSuccess);
     } catch (error) {
