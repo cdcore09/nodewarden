@@ -76,7 +76,7 @@ Stock route inventory (from `AppMainRoutes.tsx:224-561`): `/vault`, `/vault/totp
 | Help | **Stock**, reached via command mode (no native Next page) | unchanged from original scoping |
 | Onboarding (register → first item) | **Next** (rides slices 1+2+3) | J6 |
 
-**Escape hatch (standing decision):** stock UI stays one toggle away. In Next: command `>classic ui` plus a persistent low-key affordance (footer of the app menu). The `nodewarden.ui.v2` flag flips both ways instantly. (As of the 2026-08-06 default flip, Next is the default read on an absent/unrecognized flag value; opting out to classic now persists the literal `'v1'` rather than clearing the key — see the changelog above.)
+**Escape hatch (standing decision):** stock UI stays one toggle away. The switch to classic lives in Next Settings → Interface — the only in-Next place it lives — plus the `?classic=1` URL bypass and direct classic-route URLs. The `nodewarden.ui.v2` flag flips both ways instantly. (As of the 2026-08-06 default flip, Next is the default read on an absent/unrecognized flag value; opting out to classic now persists the literal `'v1'` rather than clearing the key — see the changelog above.)
 
 ---
 

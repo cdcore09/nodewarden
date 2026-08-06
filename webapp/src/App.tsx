@@ -2434,7 +2434,10 @@ export default function App() {
   }
 
   if (phase === 'register' || phase === 'login' || phase === 'locked') {
-    const AuthSurface = readUiVersion() === 'v2' ? AuthViewsNext : (AuthViews as unknown as typeof AuthViewsNext);
+    // ?classic=1 escape hatch (mirrors the /vault->/next redirect above) lets a
+    // brand-new user fall back to classic auth if the V2 auth surface has issues.
+    const wantsClassic = /[?&]classic=/.test(window.location.search);
+    const AuthSurface = readUiVersion() === 'v2' && !wantsClassic ? AuthViewsNext : (AuthViews as unknown as typeof AuthViewsNext);
     return (
       <>
         <AuthSurface
