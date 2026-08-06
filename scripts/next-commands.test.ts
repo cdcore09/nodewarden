@@ -21,7 +21,7 @@ test('registry includes the command floor', () => {
     'settings', 'generator', 'security-audit', 'sends',
     'verification-codes', 'organizations', 'import', 'backup', 'admin',
     'devices', 'domain-rules', 'logs', 'help',
-    'lock', 'log-out', 'new-item',
+    'lock', 'log-out', 'new-item', 'new-folder',
   ]) {
     assert.ok(ids.includes(required), `missing command: ${required}`);
   }
@@ -39,6 +39,11 @@ test('subsequence fallback finds "Security audit" from "audit" and "scrty"', () 
   const commands = listCommands();
   assert.ok(filterCommands(commands, 'audit').some((c) => c.id === 'security-audit'));
   assert.ok(filterCommands(commands, 'scrty').some((c) => c.id === 'security-audit'));
+});
+
+test('substring filtering finds "New folder…" from "folder"', () => {
+  const commands = listCommands();
+  assert.ok(filterCommands(commands, 'folder').some((c) => c.id === 'new-folder'));
 });
 
 test('empty query returns everything', () => {

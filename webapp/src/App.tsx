@@ -2560,6 +2560,9 @@ export default function App() {
           onBulkArchive={effectiveMainRoutesProps.onBulkArchiveVaultItems}
           onBulkUnarchive={effectiveMainRoutesProps.onBulkUnarchiveVaultItems}
           onBulkMove={effectiveMainRoutesProps.onBulkMoveVaultItems}
+          onCreateFolder={effectiveMainRoutesProps.onCreateFolder}
+          onRenameFolder={effectiveMainRoutesProps.onRenameFolder}
+          onDeleteFolder={effectiveMainRoutesProps.onDeleteFolder}
           onRefresh={effectiveMainRoutesProps.onRefreshVault}
           onDownloadAttachment={effectiveMainRoutesProps.onDownloadVaultAttachment}
           downloadingAttachmentKey={effectiveMainRoutesProps.downloadingAttachmentKey}

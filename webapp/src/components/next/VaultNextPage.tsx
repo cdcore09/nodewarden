@@ -67,6 +67,11 @@ const STR = {
   manageSharingHelp: 'Change which of the organization’s collections carry this item.',
   moveToFolder: 'Move to folder',
   noFolder: 'No folder',
+  newFolder: 'New folder',
+  renameFolder: 'Rename folder',
+  deleteFolder: 'Delete folder',
+  deleteFolderTitle: (name: string) => `Delete “${name}”?`,
+  deleteFolderMessage: 'Items in it are kept and moved to No folder.',
   sort: { name: 'Name', edited: 'Last edited', created: 'Created' } as Record<SortMode, string>,
   sortLabel: 'Sort',
   audit: 'Security audit',
@@ -127,6 +132,9 @@ interface VaultNextPageProps {
   onBulkArchive: (ids: string[]) => Promise<void>;
   onBulkUnarchive: (ids: string[]) => Promise<void>;
   onBulkMove: (ids: string[], folderId: string | null) => Promise<void>;
+  onCreateFolder: (name: string) => Promise<void>;
+  onRenameFolder: (folderId: string, name: string) => Promise<void>;
+  onDeleteFolder: (folderId: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
   downloadingAttachmentKey?: string;
@@ -173,6 +181,18 @@ interface RowMenuState {
   x: number;
   y: number;
 }
+
+interface FolderMenuState {
+  folderId: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
+type FolderDialogState =
+  | { mode: 'create' }
+  | { mode: 'rename'; folderId: string; current: string }
+  | { mode: 'delete'; folderId: string; name: string };
 
 const clipboardPort: ClipboardPort = {
   write: (text) => navigator.clipboard.writeText(text),
@@ -272,6 +292,10 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
+  const [folderMenu, setFolderMenu] = useState<FolderMenuState | null>(null);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState | null>(null);
+  const [folderNameInput, setFolderNameInput] = useState('');
+  const [folderDialogBusy, setFolderDialogBusy] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -723,6 +747,46 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     });
   };
 
+  const openCreateFolderDialog = () => {
+    setFolderMenu(null);
+    setFolderNameInput('');
+    setFolderDialog({ mode: 'create' });
+  };
+
+  const openRenameFolderDialog = (folderId: string, current: string) => {
+    setFolderMenu(null);
+    setFolderNameInput(current);
+    setFolderDialog({ mode: 'rename', folderId, current });
+  };
+
+  const openDeleteFolderDialog = (folderId: string, name: string) => {
+    setFolderMenu(null);
+    setFolderDialog({ mode: 'delete', folderId, name });
+  };
+
+  const closeFolderDialog = () => {
+    if (folderDialogBusy) return;
+    setFolderDialog(null);
+    setFolderNameInput('');
+  };
+
+  const submitFolderDialog = async () => {
+    if (!folderDialog || folderDialogBusy) return;
+    if (folderDialog.mode !== 'delete' && !folderNameInput.trim()) return;
+    setFolderDialogBusy(true);
+    try {
+      if (folderDialog.mode === 'create') await props.onCreateFolder(folderNameInput.trim());
+      else if (folderDialog.mode === 'rename') await props.onRenameFolder(folderDialog.folderId, folderNameInput.trim());
+      else await props.onDeleteFolder(folderDialog.folderId);
+      setFolderDialog(null);
+      setFolderNameInput('');
+    } catch {
+      // The action layer already shows the user-facing error toast; keep the dialog open for retry.
+    } finally {
+      setFolderDialogBusy(false);
+    }
+  };
+
   const duplicateEntry = async (entry: SearchEntry) => {
     const cipher = cipherById.get(entry.id);
     if (!cipher) return;
@@ -748,7 +812,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     setConfirm({ title, message, confirmLabel, run });
   };
 
-  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || sortMenuOpen || newMenuOpen || sheetOpen;
+  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || !!folderMenu || sortMenuOpen || newMenuOpen || sheetOpen;
 
   // Dashboard keyboard model.
   useEffect(() => {
@@ -764,8 +828,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         return;
       }
       if (overlaysOpen) {
-        if (event.key === 'Escape' && (rowMenu || sortMenuOpen || newMenuOpen)) {
-          setRowMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
+        if (event.key === 'Escape' && (rowMenu || folderMenu || sortMenuOpen || newMenuOpen)) {
+          setRowMenu(null); setFolderMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
         }
         return;
       }
@@ -808,7 +872,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, sortMenuOpen, newMenuOpen, selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen, selection]);
+  }, [overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, folderMenu, sortMenuOpen, newMenuOpen, selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen, selection]);
 
   useEffect(() => {
     if (selectedIndex < 0) return;
@@ -819,7 +883,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   }, [selectedIndex]);
 
   const railLink = (
-    key: string, label: string, icon: preact.ComponentChildren, target: ScopeFilter, count?: number
+    key: string, label: string, icon: preact.ComponentChildren, target: ScopeFilter, count?: number,
+    onContextMenu?: (e: MouseEvent) => void
   ) => {
     const on = page === 'vault' && JSON.stringify(scope) === JSON.stringify(target);
     return (
@@ -829,6 +894,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         className={`rail-link${on ? ' on' : ''}`}
         aria-current={on ? 'page' : undefined}
         onClick={() => { setScope(target); closePanels(); if (page !== 'vault') navigate('/next'); }}
+        onContextMenu={onContextMenu}
       >
         {icon}{label}
         {typeof count === 'number' && count > 0 && <span className="count">{count}</span>}
@@ -842,6 +908,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const rowMenuEntry = rowMenu ? entries.find((e) => e.id === rowMenu.entryId) || null : null;
   const rowMenuCipher = rowMenuEntry ? cipherById.get(rowMenuEntry.id) : null;
   const rowMenuUri = rowMenuCipher?.login?.uris?.find((u) => u.decUri || u.uri);
+
+  const folderDialogTitle = !folderDialog
+    ? ''
+    : folderDialog.mode === 'create'
+    ? STR.newFolder
+    : folderDialog.mode === 'rename'
+    ? STR.renameFolder
+    : STR.deleteFolderTitle(folderDialog.name);
 
   return (
     <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}${railDrawerOpen ? ' rail-drawer' : ''}`}>
@@ -869,16 +943,23 @@ export default function VaultNextPage(props: VaultNextPageProps) {
 
         {props.folders.length > 0 && (
           <div className="rail-group">
-            <div className="rail-head">{STR.folders}</div>
-            {props.folders.map((folder) =>
-              railLink(
+            <div className="rail-head">
+              {STR.folders}
+              <button type="button" className="nx-iconbtn" aria-label={STR.newFolder} title={STR.newFolder} onClick={openCreateFolderDialog}>
+                <Plus size={12} />
+              </button>
+            </div>
+            {props.folders.map((folder) => {
+              const name = folder.decName || folder.name || '';
+              return railLink(
                 `f${folder.id}`,
-                folder.decName || folder.name || '',
+                name,
                 <FolderIcon size={14} />,
-                { kind: 'folder', folderId: folder.id, label: folder.decName || folder.name || '' },
-                counts.byFolder.get(folder.id)
-              )
-            )}
+                { kind: 'folder', folderId: folder.id, label: name },
+                counts.byFolder.get(folder.id),
+                (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
+              );
+            })}
           </div>
         )}
 
@@ -1382,6 +1463,32 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         </>
       )}
 
+      {folderMenu && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 15 }} onClick={() => setFolderMenu(null)} />
+          <div
+            className="nx-menu"
+            role="menu"
+            ref={(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.querySelector<HTMLElement>('.mrow')?.focus(); } }}
+            style={{ left: Math.min(folderMenu.x, window.innerWidth - 200), top: Math.min(folderMenu.y, window.innerHeight - 140), zIndex: 20 }}
+            onKeyDown={(e) => {
+              const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.mrow'));
+              const current = items.indexOf(document.activeElement as HTMLElement);
+              if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(current + 1, items.length - 1)]?.focus(); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(current - 1, 0)]?.focus(); }
+              else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setFolderMenu(null); }
+            }}
+          >
+            <button type="button" role="menuitem" className="mrow" onClick={() => openRenameFolderDialog(folderMenu.folderId, folderMenu.name)}>
+              <Pencil size={13} />{STR.renameFolder}
+            </button>
+            <button type="button" role="menuitem" className="mrow danger" onClick={() => openDeleteFolderDialog(folderMenu.folderId, folderMenu.name)}>
+              <Trash2 size={13} />{STR.deleteFolder}
+            </button>
+          </div>
+        </>
+      )}
+
       {shareOpen && openCipher && (
         <ShareDialog
           cipherName={openCipher.decName || ''}
@@ -1409,6 +1516,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           onOpen={openEntry}
           onEdit={editEntry}
           onStartCreate={startCreate}
+          onStartCreateFolder={() => { setPaletteOpen(false); openCreateFolderDialog(); }}
           onClose={() => setPaletteOpen(false)}
         />
       )}
@@ -1517,6 +1625,43 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 <FolderIcon size={13} />{folder.name}
               </button>
             ))}
+          </div>
+        </TrappedDialog>
+      )}
+
+      {folderDialog && (
+        <TrappedDialog label={folderDialogTitle} onClose={folderDialogBusy ? undefined : closeFolderDialog}>
+          <h3>{folderDialogTitle}</h3>
+          {folderDialog.mode === 'delete' ? (
+            <div className="nx-help">{STR.deleteFolderMessage}</div>
+          ) : (
+            <div className="nx-field">
+              <input
+                className="nx-input"
+                type="text"
+                aria-label={folderDialogTitle}
+                value={folderNameInput}
+                disabled={folderDialogBusy}
+                onInput={(e) => setFolderNameInput((e.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); void submitFolderDialog(); }
+                  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFolderDialog(); }
+                }}
+              />
+            </div>
+          )}
+          <div className="dfoot">
+            <button type="button" className="nx-btn ghost" disabled={folderDialogBusy} onClick={closeFolderDialog} autoFocus={folderDialog.mode === 'delete'}>
+              {t('txt_cancel')} <span className="nx-kbd">esc</span>
+            </button>
+            <button
+              type="button"
+              className={folderDialog.mode === 'delete' ? 'nx-btn danger-fill' : 'nx-btn'}
+              disabled={folderDialogBusy || (folderDialog.mode !== 'delete' && !folderNameInput.trim())}
+              onClick={() => void submitFolderDialog()}
+            >
+              {folderDialog.mode === 'delete' ? t('txt_delete') : t('txt_save')} <span className="nx-kbd on-fill">↵</span>
+            </button>
           </div>
         </TrappedDialog>
       )}

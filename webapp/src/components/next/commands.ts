@@ -44,6 +44,14 @@ export function listCommands(): NextCommand[] {
         dispatchAddItemWithRetry();
       },
     },
+    {
+      id: 'new-folder',
+      label: 'New folder…',
+      hint: 'organize the vault',
+      // No-op: the palette (CommandPalette.tsx runCommand) intercepts this id
+      // and opens the Next folder-create dialog directly, mirroring 'new-item'.
+      run() {},
+    },
     { id: 'security-audit', label: 'Security audit', hint: 'weak · reused · breached', run: (ctx) => ctx.navigate('/next/audit') },
     { id: 'generator', label: 'Password generator', run: (ctx) => ctx.navigate('/next/generator') },
     { id: 'verification-codes', label: 'Verification codes', hint: 'all TOTP codes', run: (ctx) => ctx.navigate('/next/totp') },

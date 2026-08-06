@@ -56,7 +56,12 @@
   text-transform: uppercase;
   color: var(--nx-ink-faint);
   padding: var(--nx-sp-2) var(--nx-sp-2) 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.nx-rail .rail-head .nx-iconbtn { width: 18px; height: 18px; margin-left: var(--nx-sp-2); text-transform: none; letter-spacing: normal; }
+.nx-rail .rail-head .nx-iconbtn svg { width: 12px; height: 12px; }
 .nx-rail .rail-link {
   display: flex;
   align-items: center;
