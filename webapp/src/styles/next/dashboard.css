@@ -56,7 +56,12 @@
   text-transform: uppercase;
   color: var(--nx-ink-faint);
   padding: var(--nx-sp-2) var(--nx-sp-2) 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
+.nx-rail .rail-head .nx-iconbtn { width: 18px; height: 18px; margin-left: var(--nx-sp-2); text-transform: none; letter-spacing: normal; }
+.nx-rail .rail-head .nx-iconbtn svg { width: 12px; height: 12px; }
 .nx-rail .rail-link {
   display: flex;
   align-items: center;
@@ -88,6 +93,20 @@
   font-variant-numeric: tabular-nums;
   color: var(--nx-ink-faint);
 }
+/* Folder rows pair the nav button with a visible-on-hover/focus "..."
+   trigger, mirroring the item list's .rowacts/.nx-row-check reveal. */
+.nx-rail .rail-folder-row { display: flex; align-items: center; gap: 2px; }
+.nx-rail .rail-folder-row .rail-link { width: auto; flex: 1; min-width: 0; }
+.nx-rail .rail-folder-more {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  transition: opacity var(--nx-dur-1) var(--nx-ease);
+}
+.nx-rail .rail-folder-more svg { width: 12px; height: 12px; }
+.nx-rail .rail-folder-row:hover .rail-folder-more,
+.nx-rail .rail-folder-row:focus-within .rail-folder-more { opacity: 1; }
 .nx-rail .rail-link.on .count { color: var(--nx-accent); }
 .nx-rail .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
 .nx-rail .rail-sep { height: 1px; background: var(--nx-line-soft); margin: var(--nx-sp-1) var(--nx-sp-2); }
@@ -174,7 +193,21 @@
   overflow-y: auto;
   padding: var(--nx-sp-3) var(--nx-sp-6) var(--nx-sp-8);
 }
-.nx-list .nx-row { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.nx-list .nx-row { grid-template-columns: 20px 28px minmax(0, 1fr) auto; }
+.nx-list .nx-row.is-selected { background: var(--nx-accent-soft); }
+.nx-row-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.nx-row-check input { margin: 0; cursor: pointer; }
+.nx-list .nx-row:hover .nx-row-check,
+.nx-list .nx-row:focus-within .nx-row-check,
+.nx-list.has-selection .nx-row-check { opacity: 1; }
 .nx-list .nx-row .rowacts {
   display: none;
   align-items: center;
@@ -399,6 +432,10 @@
   background: var(--nx-accent-soft);
 }
 .nx-menu .mrow.danger { color: var(--nx-danger); }
+.nx-selbar-actions { display: inline-flex; align-items: center; gap: var(--nx-sp-2); }
+.nx-dashhead .hbtn.danger { color: var(--nx-danger); border-color: var(--nx-danger); }
+.nx-dashhead .hbtn.danger:hover { background: var(--nx-danger-soft); }
+.nx-dashhead .hbtn:disabled { opacity: 0.5; cursor: default; }
 .nx-sr-only {
   position: absolute;
   width: 1px;

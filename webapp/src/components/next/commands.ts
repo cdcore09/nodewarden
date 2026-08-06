@@ -44,12 +44,28 @@ export function listCommands(): NextCommand[] {
         dispatchAddItemWithRetry();
       },
     },
+    {
+      id: 'new-folder',
+      label: 'New folder…',
+      hint: 'organize the vault',
+      // No-op: the palette (CommandPalette.tsx runCommand) intercepts this id
+      // and opens the Next folder-create dialog directly, mirroring 'new-item'.
+      run() {},
+    },
     { id: 'security-audit', label: 'Security audit', hint: 'weak · reused · breached', run: (ctx) => ctx.navigate('/next/audit') },
     { id: 'generator', label: 'Password generator', run: (ctx) => ctx.navigate('/next/generator') },
     { id: 'verification-codes', label: 'Verification codes', hint: 'all TOTP codes', run: (ctx) => ctx.navigate('/next/totp') },
     { id: 'sends', label: 'Sends', run: (ctx) => ctx.navigate('/next/sends') },
     { id: 'organizations', label: 'Organizations', hint: 'members · collections', run: (ctx) => ctx.navigate('/next/orgs') },
     { id: 'import', label: 'Import', hint: 'from another password manager', run: (ctx) => ctx.navigate('/next/import') },
+    {
+      id: 'export-vault',
+      label: 'Export vault…',
+      hint: 'download your vault data',
+      // No-op: the palette (CommandPalette.tsx runCommand) intercepts this id
+      // and opens the Next settings export dialog directly, mirroring 'new-folder'.
+      run() {},
+    },
     { id: 'backup', label: 'Backup center', run: (ctx) => ctx.navigate('/backup') },
     { id: 'settings', label: 'Settings', run: (ctx) => ctx.navigate('/next/settings') },
     { id: 'devices', label: 'Device management', run: (ctx) => ctx.navigate('/settings/security/device-management') },

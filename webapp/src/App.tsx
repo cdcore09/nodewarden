@@ -2555,6 +2555,14 @@ export default function App() {
           onUnarchive={effectiveMainRoutesProps.onUnarchiveVaultItem}
           onRestore={effectiveMainRoutesProps.onRestoreVaultItems}
           onBulkPermanentDelete={effectiveMainRoutesProps.onBulkPermanentDeleteVaultItems}
+          onBulkDelete={effectiveMainRoutesProps.onBulkDeleteVaultItems}
+          onBulkRestore={effectiveMainRoutesProps.onBulkRestoreVaultItems}
+          onBulkArchive={effectiveMainRoutesProps.onBulkArchiveVaultItems}
+          onBulkUnarchive={effectiveMainRoutesProps.onBulkUnarchiveVaultItems}
+          onBulkMove={effectiveMainRoutesProps.onBulkMoveVaultItems}
+          onCreateFolder={effectiveMainRoutesProps.onCreateFolder}
+          onRenameFolder={effectiveMainRoutesProps.onRenameFolder}
+          onDeleteFolder={effectiveMainRoutesProps.onDeleteFolder}
           onRefresh={effectiveMainRoutesProps.onRefreshVault}
           onDownloadAttachment={effectiveMainRoutesProps.onDownloadVaultAttachment}
           downloadingAttachmentKey={effectiveMainRoutesProps.downloadingAttachmentKey}
@@ -2573,6 +2581,7 @@ export default function App() {
           onLogout={logoutNow}
           onNotify={pushToast}
           onImport={effectiveMainRoutesProps.onImport}
+          onExport={effectiveMainRoutesProps.onExport}
           authedFetch={IS_DEMO_MODE ? demoOrgFetch : authedFetch}
           orgKeys={IS_DEMO_MODE ? DEMO_ORG_KEYS : orgKeysCache}
         />

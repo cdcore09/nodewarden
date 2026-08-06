@@ -1459,7 +1459,13 @@ export function createDemoMainRoutesProps(base: AppMainRoutesProps, notify: Noti
       await readonly();
       return createDemoImportResult();
     },
-    onExport: readonly,
+    // Unlike the other readonly no-ops, export must reject rather than resolve: the export
+    // dialog treats a resolved onExport as a completed download and shows a false "Vault
+    // exported" success toast even though no file was produced. Throwing routes the demo
+    // message through the dialog's own inline error path instead.
+    onExport: async () => {
+      throw new Error(t('txt_demo_readonly_message'));
+    },
     onCreateVaultItem: async (draft) => {
       const created = cipherFromDraft(draft);
       state.setCiphers((prev) => [created, ...prev]);

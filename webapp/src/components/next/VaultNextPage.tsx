@@ -24,6 +24,7 @@ import type { ImportResultSummary } from '@/components/ImportPage';
 import ShortcutSheet from './ShortcutSheet';
 import { useDialogFocus } from './useDialogFocus';
 import type { Send, SendDraft } from '@/lib/types';
+import type { ExportRequest } from '@/lib/export-formats';
 import { generateDefaultSshKeyMaterial } from '@/lib/ssh';
 import { t } from '@/lib/i18n';
 import { calcTotpNow } from '@/lib/crypto';
@@ -32,6 +33,7 @@ import {
   type ScopeFilter, type SearchEntry, type SortMode,
 } from '@/lib/next/search';
 import { copySensitive, CLIPBOARD_CLEAR_SECONDS, type ClipboardPort } from '@/lib/next/clipboard-clear';
+import { pruneSelection, rangeSelect, toggleSelection } from '@/lib/next/selection';
 import { setUiVersion } from '@/lib/ui-version';
 import {
   TypeIcon, buildCipherDuplicateSignatures, cipherTypeLabel, createEmptyDraft, draftFromCipher,
@@ -66,6 +68,12 @@ const STR = {
   manageSharingHelp: 'Change which of the organization’s collections carry this item.',
   moveToFolder: 'Move to folder',
   noFolder: 'No folder',
+  newFolder: 'New folder',
+  folderOptions: 'Folder options',
+  renameFolder: 'Rename folder',
+  deleteFolder: 'Delete folder',
+  deleteFolderTitle: (name: string) => `Delete “${name}”?`,
+  deleteFolderMessage: 'Items in it are kept and moved to No folder.',
   sort: { name: 'Name', edited: 'Last edited', created: 'Created' } as Record<SortMode, string>,
   sortLabel: 'Sort',
   audit: 'Security audit',
@@ -87,6 +95,12 @@ const STR = {
   deleteForever: 'Delete forever',
   deleteForeverTitle: (name: string) => `Delete “${name}” forever?`,
   deleteForeverMessage: 'This permanently removes the item. There is no undo.',
+  selectedCount: (n: number) => `${n} selected`,
+  selectItem: (name: string) => `Select ${name}`,
+  bulkMove: 'Move…',
+  clearSelection: 'Clear',
+  deleteForeverManyTitle: (n: number) => `Permanently delete ${n} item${n === 1 ? '' : 's'}?`,
+  deleteForeverManyMessage: 'This cannot be undone.',
   emptyVault: 'Your vault is empty.',
   createFirst: 'Create your first login',
   emptyScope: 'Nothing here.',
@@ -115,6 +129,14 @@ interface VaultNextPageProps {
   onUnarchive: (cipher: Cipher) => Promise<void>;
   onRestore: (ids: string[]) => Promise<void>;
   onBulkPermanentDelete: (ids: string[]) => Promise<void>;
+  onBulkDelete: (ids: string[]) => Promise<void>;
+  onBulkRestore: (ids: string[]) => Promise<void>;
+  onBulkArchive: (ids: string[]) => Promise<void>;
+  onBulkUnarchive: (ids: string[]) => Promise<void>;
+  onBulkMove: (ids: string[], folderId: string | null) => Promise<void>;
+  onCreateFolder: (name: string) => Promise<void>;
+  onRenameFolder: (folderId: string, name: string) => Promise<void>;
+  onDeleteFolder: (folderId: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDownloadAttachment: (cipher: Cipher, attachmentId: string) => Promise<void>;
   downloadingAttachmentKey?: string;
@@ -136,6 +158,7 @@ interface VaultNextPageProps {
     payload: CiphersImportPayload,
     options: { folderMode: 'original' | 'none' | 'target'; targetFolderId: string | null }
   ) => Promise<ImportResultSummary>;
+  onExport: (request: ExportRequest) => Promise<void>;
   authedFetch: AuthedFetch;
   orgKeys: Record<string, Uint8Array>;
 }
@@ -161,6 +184,18 @@ interface RowMenuState {
   x: number;
   y: number;
 }
+
+interface FolderMenuState {
+  folderId: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
+type FolderDialogState =
+  | { mode: 'create' }
+  | { mode: 'rename'; folderId: string; current: string }
+  | { mode: 'delete'; folderId: string; name: string };
 
 const clipboardPort: ClipboardPort = {
   write: (text) => navigator.clipboard.writeText(text),
@@ -240,6 +275,10 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [duplicateMode, setDuplicateMode] = useState<DuplicateDetectionMode>('exact');
   const [syncing, setSyncing] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<VaultDraft | null>(null);
   const [draftBase, setDraftBase] = useState('');
@@ -250,12 +289,21 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const [shareSubmitting, setShareSubmitting] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSeed, setPaletteSeed] = useState('');
+  // Owned here (not by NextSettingsPage) so the palette's "Export vault…"
+  // command can open the dialog whether or not the settings page is already
+  // mounted — mirrors how folderDialog is reachable from both the rail and
+  // the palette's onStartCreateFolder.
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; seconds: number | null } | null>(null);
   const [gate, setGate] = useState<GateState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null);
+  const [folderMenu, setFolderMenu] = useState<FolderMenuState | null>(null);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState | null>(null);
+  const [folderNameInput, setFolderNameInput] = useState('');
+  const [folderDialogBusy, setFolderDialogBusy] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -299,6 +347,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const unlockedIds = useRef<Set<string>>(new Set());
   const gateRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const shiftDownRef = useRef(false);
 
   const cipherById = useMemo(() => {
     const map = new Map<string, Cipher>();
@@ -334,6 +383,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       .slice(0, LIST_CAP);
   }, [scoped.results, sort, scope.kind, duplicateMode, cipherById]);
   const scopedTotal = scope.kind === 'duplicates' ? viewEntries.length : scoped.total;
+  const visibleIds = useMemo(() => viewEntries.map((entry) => entry.id), [viewEntries]);
+
+  // Bulk-selection membership tracks whatever's on screen: shrink the
+  // selection when scope/search/sort changes hide a previously-checked row,
+  // but never clear it outright just because the list re-rendered.
+  useEffect(() => {
+    setSelection((current) => pruneSelection(current, visibleIds));
+  }, [visibleIds]);
 
   const counts = useMemo(() => {
     const byType = new Map<number, number>();
@@ -645,6 +702,99 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     }
   };
 
+  const clearSelection = () => {
+    setSelection(new Set());
+    setSelectionAnchor(null);
+  };
+
+  const runBulkAction = async (action: 'archive' | 'unarchive' | 'trash' | 'restore') => {
+    if (bulkBusy || selection.size === 0) return;
+    const ids = [...selection];
+    setBulkBusy(true);
+    try {
+      if (action === 'archive') await props.onBulkArchive(ids);
+      else if (action === 'unarchive') await props.onBulkUnarchive(ids);
+      else if (action === 'trash') await props.onBulkDelete(ids);
+      else await props.onBulkRestore(ids);
+      if (openId && ids.includes(openId) && (action === 'trash' || action === 'archive')) closePanels();
+      clearSelection();
+    } catch (error) {
+      props.onNotify('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkMove = async (folderId: string | null) => {
+    if (bulkBusy || selection.size === 0) return;
+    const ids = [...selection];
+    setBulkBusy(true);
+    try {
+      await props.onBulkMove(ids, folderId);
+      setBulkMoveOpen(false);
+      clearSelection();
+    } catch (error) {
+      props.onNotify('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const requestBulkDeleteForever = () => {
+    const ids = [...selection];
+    if (ids.length === 0) return;
+    setConfirm({
+      title: STR.deleteForeverManyTitle(ids.length),
+      message: STR.deleteForeverManyMessage,
+      confirmLabel: STR.deleteForever,
+      run: async () => {
+        await props.onBulkPermanentDelete(ids);
+        if (openId && ids.includes(openId)) closePanels();
+        clearSelection();
+      },
+    });
+  };
+
+  const openCreateFolderDialog = () => {
+    setFolderMenu(null);
+    setFolderNameInput('');
+    setFolderDialog({ mode: 'create' });
+  };
+
+  const openRenameFolderDialog = (folderId: string, current: string) => {
+    setFolderMenu(null);
+    setFolderNameInput(current);
+    setFolderDialog({ mode: 'rename', folderId, current });
+  };
+
+  const openDeleteFolderDialog = (folderId: string, name: string) => {
+    setFolderMenu(null);
+    setFolderDialog({ mode: 'delete', folderId, name });
+  };
+
+  const closeFolderDialog = () => {
+    if (folderDialogBusy) return;
+    setFolderDialog(null);
+    setFolderNameInput('');
+  };
+
+  const submitFolderDialog = async () => {
+    if (!folderDialog || folderDialogBusy) return;
+    if (folderDialog.mode !== 'delete' && !folderNameInput.trim()) return;
+    setFolderDialogBusy(true);
+    try {
+      if (folderDialog.mode === 'create') await props.onCreateFolder(folderNameInput.trim());
+      else if (folderDialog.mode === 'rename') await props.onRenameFolder(folderDialog.folderId, folderNameInput.trim());
+      else await props.onDeleteFolder(folderDialog.folderId);
+      setFolderDialog(null);
+      setFolderNameInput('');
+    } catch {
+      // The action layer already shows the user-facing error toast; keep the dialog open for retry.
+    } finally {
+      setFolderDialogBusy(false);
+    }
+  };
+
   const duplicateEntry = async (entry: SearchEntry) => {
     const cipher = cipherById.get(entry.id);
     if (!cipher) return;
@@ -670,7 +820,9 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     setConfirm({ title, message, confirmLabel, run });
   };
 
-  const overlaysOpen = paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || sortMenuOpen || newMenuOpen || sheetOpen;
+  const overlaysOpen =
+    paletteOpen || editorOpen || shareOpen || !!gate || !!confirm || !!rowMenu || !!folderMenu || sortMenuOpen || newMenuOpen || sheetOpen ||
+    !!folderDialog || bulkMoveOpen || !!moveEntryId || exportDialogOpen;
 
   // Dashboard keyboard model.
   useEffect(() => {
@@ -682,12 +834,17 @@ export default function VaultNextPage(props: VaultNextPageProps) {
       if (meta && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setRowMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
-        if (!editorOpen && !gate && !confirm) { setPaletteSeed(''); setPaletteOpen((open) => !open); }
+        // Palette toggle stays keyed off the individual flags (not overlaysOpen) so it can still
+        // close itself when it's the only thing open — but it must not steal focus or pop underneath
+        // any of the z-35 dialogs below, so those are excluded here too.
+        if (!editorOpen && !gate && !confirm && !folderDialog && !bulkMoveOpen && !moveEntryId && !exportDialogOpen) {
+          setPaletteSeed(''); setPaletteOpen((open) => !open);
+        }
         return;
       }
       if (overlaysOpen) {
-        if (event.key === 'Escape' && (rowMenu || sortMenuOpen || newMenuOpen)) {
-          setRowMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
+        if (event.key === 'Escape' && (rowMenu || folderMenu || sortMenuOpen || newMenuOpen)) {
+          setRowMenu(null); setFolderMenu(null); setSortMenuOpen(false); setNewMenuOpen(false);
         }
         return;
       }
@@ -714,7 +871,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         event.preventDefault();
         openEntry(selectedEntry);
       } else if (event.key === 'Escape') {
-        if (panelOpen) { event.preventDefault(); closePanels(); }
+        if (selection.size > 0) { event.preventDefault(); clearSelection(); }
+        else if (panelOpen) { event.preventDefault(); closePanels(); }
         else if (selectedIndex >= 0) { event.preventDefault(); setSelectedIndex(-1); }
       } else if (!targetIsInput && !meta && !event.altKey && (event.key === '?' || (event.key === '/' && event.shiftKey))) {
         // "?" opens the shortcut cheat sheet — the discoverability layer.
@@ -729,7 +887,11 @@ export default function VaultNextPage(props: VaultNextPageProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, sortMenuOpen, newMenuOpen, selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen]);
+  }, [
+    overlaysOpen, paletteOpen, editorOpen, gate, confirm, rowMenu, folderMenu, sortMenuOpen, newMenuOpen,
+    folderDialog, bulkMoveOpen, moveEntryId, exportDialogOpen,
+    selectedEntry, selectedIndex, viewEntries, openCipher, entries, panelOpen, selection,
+  ]);
 
   useEffect(() => {
     if (selectedIndex < 0) return;
@@ -740,7 +902,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   }, [selectedIndex]);
 
   const railLink = (
-    key: string, label: string, icon: preact.ComponentChildren, target: ScopeFilter, count?: number
+    key: string, label: string, icon: preact.ComponentChildren, target: ScopeFilter, count?: number,
+    onContextMenu?: (e: MouseEvent) => void
   ) => {
     const on = page === 'vault' && JSON.stringify(scope) === JSON.stringify(target);
     return (
@@ -750,6 +913,7 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         className={`rail-link${on ? ' on' : ''}`}
         aria-current={on ? 'page' : undefined}
         onClick={() => { setScope(target); closePanels(); if (page !== 'vault') navigate('/next'); }}
+        onContextMenu={onContextMenu}
       >
         {icon}{label}
         {typeof count === 'number' && count > 0 && <span className="count">{count}</span>}
@@ -763,6 +927,14 @@ export default function VaultNextPage(props: VaultNextPageProps) {
   const rowMenuEntry = rowMenu ? entries.find((e) => e.id === rowMenu.entryId) || null : null;
   const rowMenuCipher = rowMenuEntry ? cipherById.get(rowMenuEntry.id) : null;
   const rowMenuUri = rowMenuCipher?.login?.uris?.find((u) => u.decUri || u.uri);
+
+  const folderDialogTitle = !folderDialog
+    ? ''
+    : folderDialog.mode === 'create'
+    ? STR.newFolder
+    : folderDialog.mode === 'rename'
+    ? STR.renameFolder
+    : STR.deleteFolderTitle(folderDialog.name);
 
   return (
     <div className={`nw-next nx-dash nx-vault${panelOpen ? ' has-panel' : ''}${railCollapsed ? ' rail-collapsed' : ''}${railDrawerOpen ? ' rail-drawer' : ''}`}>
@@ -788,20 +960,42 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           )}
         </div>
 
-        {props.folders.length > 0 && (
-          <div className="rail-group">
-            <div className="rail-head">{STR.folders}</div>
-            {props.folders.map((folder) =>
-              railLink(
-                `f${folder.id}`,
-                folder.decName || folder.name || '',
-                <FolderIcon size={14} />,
-                { kind: 'folder', folderId: folder.id, label: folder.decName || folder.name || '' },
-                counts.byFolder.get(folder.id)
-              )
-            )}
+        <div className="rail-group">
+          <div className="rail-head">
+            {STR.folders}
+            <button type="button" className="nx-iconbtn" aria-label={STR.newFolder} title={STR.newFolder} onClick={openCreateFolderDialog}>
+              <Plus size={12} />
+            </button>
           </div>
-        )}
+          {props.folders.length > 0 && props.folders.map((folder) => {
+            const name = folder.decName || folder.name || '';
+            return (
+              <div key={`fw${folder.id}`} className="rail-folder-row">
+                {railLink(
+                  `f${folder.id}`,
+                  name,
+                  <FolderIcon size={14} />,
+                  { kind: 'folder', folderId: folder.id, label: name },
+                  counts.byFolder.get(folder.id),
+                  (e) => { e.preventDefault(); setFolderMenu({ folderId: folder.id, name, x: e.clientX, y: e.clientY }); }
+                )}
+                <button
+                  type="button"
+                  className="nx-iconbtn rail-folder-more"
+                  aria-label={STR.folderOptions}
+                  title={STR.folderOptions}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setFolderMenu({ folderId: folder.id, name, x: rect.right, y: rect.bottom + 4 });
+                  }}
+                >
+                  <MoreHorizontal size={12} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
 
         {props.shareOrganizations.length > 0 && (
           <div className="rail-group">
@@ -876,53 +1070,59 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           >
             <PanelLeft size={15} />
           </button>
-          <h1 className="scope-title">{page === 'vault' ? scopeTitle(scope) : PAGE_TITLES[page]}</h1>
-          {page === 'vault' && <span className="scope-count">{scopedTotal}</span>}
-          {page === 'vault' && scope.kind === 'duplicates' && (
-            <select
-              className="nx-input"
-              style={{ width: 'auto', height: 34 }}
-              value={duplicateMode}
-              aria-label={t('txt_duplicates')}
-              onInput={(e) => setDuplicateMode((e.currentTarget as HTMLSelectElement).value as DuplicateDetectionMode)}
-            >
-              {getDuplicateDetectionOptions().map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          )}
-          {page === 'vault' && (
-          <button
-            type="button"
-            className="nx-iconbtn lg"
-            title={t('txt_sync_vault')}
-            disabled={syncing}
-            onClick={() => void syncVault()}
-          >
-            <RefreshCw size={14} style={syncing ? { animation: 'nx-spin 1s linear infinite' } : undefined} />
-          </button>
-          )}
-          {page === 'vault' && (
-          <select
-            className="nx-input scope-select"
-            style={{ width: 'auto', height: 34 }}
-            value={JSON.stringify(scope)}
-            onInput={(e) => { setScope(JSON.parse((e.currentTarget as HTMLSelectElement).value)); closePanels(); }}
-            aria-label={STR.allItems}
-          >
-            <option value={JSON.stringify({ kind: 'all' })}>{STR.allItems}</option>
-            <option value={JSON.stringify({ kind: 'favorites' })}>{t('txt_favorites')}</option>
-            {ITEM_TYPES.map((type) => (
-              <option key={type} value={JSON.stringify({ kind: 'type', type })}>{cipherTypeLabel(type)}</option>
-            ))}
-            {props.folders.map((folder) => (
-              <option key={folder.id} value={JSON.stringify({ kind: 'folder', folderId: folder.id, label: folder.decName || '' })}>
-                {folder.decName || folder.name}
-              </option>
-            ))}
-            <option value={JSON.stringify({ kind: 'archive' })}>{t('txt_archive')}</option>
-            <option value={JSON.stringify({ kind: 'trash' })}>{t('txt_trash')}</option>
-          </select>
+          {page === 'vault' && selection.size > 0 ? (
+            <span className="scope-title">{STR.selectedCount(selection.size)}</span>
+          ) : (
+            <>
+              <h1 className="scope-title">{page === 'vault' ? scopeTitle(scope) : PAGE_TITLES[page]}</h1>
+              {page === 'vault' && <span className="scope-count">{scopedTotal}</span>}
+              {page === 'vault' && scope.kind === 'duplicates' && (
+                <select
+                  className="nx-input"
+                  style={{ width: 'auto', height: 34 }}
+                  value={duplicateMode}
+                  aria-label={t('txt_duplicates')}
+                  onInput={(e) => setDuplicateMode((e.currentTarget as HTMLSelectElement).value as DuplicateDetectionMode)}
+                >
+                  {getDuplicateDetectionOptions().map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              )}
+              {page === 'vault' && (
+              <button
+                type="button"
+                className="nx-iconbtn lg"
+                title={t('txt_sync_vault')}
+                disabled={syncing}
+                onClick={() => void syncVault()}
+              >
+                <RefreshCw size={14} style={syncing ? { animation: 'nx-spin 1s linear infinite' } : undefined} />
+              </button>
+              )}
+              {page === 'vault' && (
+              <select
+                className="nx-input scope-select"
+                style={{ width: 'auto', height: 34 }}
+                value={JSON.stringify(scope)}
+                onInput={(e) => { setScope(JSON.parse((e.currentTarget as HTMLSelectElement).value)); closePanels(); }}
+                aria-label={STR.allItems}
+              >
+                <option value={JSON.stringify({ kind: 'all' })}>{STR.allItems}</option>
+                <option value={JSON.stringify({ kind: 'favorites' })}>{t('txt_favorites')}</option>
+                {ITEM_TYPES.map((type) => (
+                  <option key={type} value={JSON.stringify({ kind: 'type', type })}>{cipherTypeLabel(type)}</option>
+                ))}
+                {props.folders.map((folder) => (
+                  <option key={folder.id} value={JSON.stringify({ kind: 'folder', folderId: folder.id, label: folder.decName || '' })}>
+                    {folder.decName || folder.name}
+                  </option>
+                ))}
+                <option value={JSON.stringify({ kind: 'archive' })}>{t('txt_archive')}</option>
+                <option value={JSON.stringify({ kind: 'trash' })}>{t('txt_trash')}</option>
+              </select>
+              )}
+            </>
           )}
           <span className="grow" />
           <button type="button" className="nx-palette-trigger" onClick={() => { setPaletteSeed(''); setPaletteOpen(true); }}>
@@ -933,7 +1133,40 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           <button type="button" className="nx-iconbtn lg" title="Keyboard shortcuts — ?" onClick={() => setSheetOpen(true)}>
             <HelpCircle size={15} />
           </button>
-          {page === 'vault' && (<>
+          {page === 'vault' && selection.size > 0 ? (
+            <div className="nx-selbar-actions">
+              {scope.kind !== 'trash' && props.folders.length > 0 && (
+                <button type="button" className="hbtn" disabled={bulkBusy} onClick={() => setBulkMoveOpen(true)}>
+                  <FolderIcon size={14} />{STR.bulkMove}
+                </button>
+              )}
+              {scope.kind === 'trash' ? (
+                <button type="button" className="hbtn" disabled={bulkBusy} onClick={() => void runBulkAction('restore')}>
+                  <Undo2 size={14} />{STR.restore}
+                </button>
+              ) : scope.kind === 'archive' ? (
+                <button type="button" className="hbtn" disabled={bulkBusy} onClick={() => void runBulkAction('unarchive')}>
+                  <ArchiveRestore size={14} />{STR.unarchive}
+                </button>
+              ) : (
+                <button type="button" className="hbtn" disabled={bulkBusy} onClick={() => void runBulkAction('archive')}>
+                  <Archive size={14} />{STR.archive}
+                </button>
+              )}
+              {scope.kind === 'trash' ? (
+                <button type="button" className="hbtn danger" disabled={bulkBusy} onClick={requestBulkDeleteForever}>
+                  <Trash2 size={14} />{STR.deleteForever}
+                </button>
+              ) : (
+                <button type="button" className="hbtn danger" disabled={bulkBusy} onClick={() => void runBulkAction('trash')}>
+                  <Trash2 size={14} />{STR.toTrash}
+                </button>
+              )}
+              <button type="button" className="hbtn" disabled={bulkBusy} onClick={clearSelection}>
+                {STR.clearSelection}
+              </button>
+            </div>
+          ) : page === 'vault' && (<>
           <div style={{ position: 'relative' }}>
             <button type="button" className="hbtn" aria-expanded={sortMenuOpen} onClick={() => { setSortMenuOpen((v) => !v); setNewMenuOpen(false); }}>
               {STR.sortLabel}: {STR.sort[sort]}
@@ -1016,10 +1249,13 @@ export default function VaultNextPage(props: VaultNextPageProps) {
             onSessionTimeoutActionChange={props.onSessionTimeoutActionChange}
             navigate={navigate}
             onNotify={props.onNotify}
+            onExport={props.onExport}
+            exportDialogOpen={exportDialogOpen}
+            onExportDialogOpenChange={setExportDialogOpen}
           />
         )}
         {page === 'vault' && (
-        <div className="nx-list" ref={listRef} role="listbox" aria-label={scopeTitle(scope)}>
+        <div className={`nx-list${selection.size > 0 ? ' has-selection' : ''}`} ref={listRef} role="listbox" aria-label={scopeTitle(scope)}>
           {props.loading && viewEntries.length === 0 && (
             <>
               <div className="nx-skeleton-row" />
@@ -1056,12 +1292,40 @@ export default function VaultNextPage(props: VaultNextPageProps) {
               key={entry.id}
               role="option"
               aria-selected={index === selectedIndex || entry.id === openId}
-              className={`nx-row${index === selectedIndex || entry.id === openId ? ' is-active' : ''}${entry.id === copiedId ? ' is-copied' : ''}`}
+              className={`nx-row${index === selectedIndex || entry.id === openId ? ' is-active' : ''}${entry.id === copiedId ? ' is-copied' : ''}${selection.has(entry.id) ? ' is-selected' : ''}`}
               tabIndex={index === Math.max(selectedIndex, 0) ? 0 : -1}
               onFocus={() => setSelectedIndex(index)}
               onClick={() => { setSelectedIndex(index); openEntry(entry); }}
               onContextMenu={(e) => { e.preventDefault(); setSelectedIndex(index); setRowMenu({ entryId: entry.id, x: e.clientX, y: e.clientY }); }}
             >
+              <label
+                className="nx-row-check"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => { shiftDownRef.current = e.shiftKey; }}
+                onKeyDown={(e) => { shiftDownRef.current = e.shiftKey; }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selection.has(entry.id)}
+                  aria-label={STR.selectItem(entry.name)}
+                  onChange={() => {
+                    // The checkbox's own `change` event carries no modifier
+                    // info (unlike a MouseEvent), so the immediately-preceding
+                    // mousedown/keydown on this label stashed shiftKey for us
+                    // — covers both mouse shift-click and keyboard shift+Space.
+                    // Consume-and-reset so a later plain activation (of either
+                    // kind) never reads a stale shift=true from this one.
+                    const shiftHeld = shiftDownRef.current;
+                    shiftDownRef.current = false;
+                    setSelection((current) =>
+                      shiftHeld
+                        ? rangeSelect(current, visibleIds, selectionAnchor, entry.id)
+                        : toggleSelection(current, entry.id)
+                    );
+                    setSelectionAnchor(entry.id);
+                  }}
+                />
+              </label>
               <span className="ico">
                 {entry.type === 1
                   ? <WebsiteIcon cipher={cipherById.get(entry.id)!} fallback={<TypeIcon type={entry.type} />} />
@@ -1236,6 +1500,32 @@ export default function VaultNextPage(props: VaultNextPageProps) {
         </>
       )}
 
+      {folderMenu && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 15 }} onClick={() => setFolderMenu(null)} />
+          <div
+            className="nx-menu"
+            role="menu"
+            ref={(el) => { if (el && !el.dataset.focused) { el.dataset.focused = '1'; el.querySelector<HTMLElement>('.mrow')?.focus(); } }}
+            style={{ left: Math.min(folderMenu.x, window.innerWidth - 200), top: Math.min(folderMenu.y, window.innerHeight - 140), zIndex: 20 }}
+            onKeyDown={(e) => {
+              const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.mrow'));
+              const current = items.indexOf(document.activeElement as HTMLElement);
+              if (e.key === 'ArrowDown') { e.preventDefault(); items[Math.min(current + 1, items.length - 1)]?.focus(); }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); items[Math.max(current - 1, 0)]?.focus(); }
+              else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setFolderMenu(null); }
+            }}
+          >
+            <button type="button" role="menuitem" className="mrow" onClick={() => openRenameFolderDialog(folderMenu.folderId, folderMenu.name)}>
+              <Pencil size={13} />{STR.renameFolder}
+            </button>
+            <button type="button" role="menuitem" className="mrow danger" onClick={() => openDeleteFolderDialog(folderMenu.folderId, folderMenu.name)}>
+              <Trash2 size={13} />{STR.deleteFolder}
+            </button>
+          </div>
+        </>
+      )}
+
       {shareOpen && openCipher && (
         <ShareDialog
           cipherName={openCipher.decName || ''}
@@ -1263,6 +1553,8 @@ export default function VaultNextPage(props: VaultNextPageProps) {
           onOpen={openEntry}
           onEdit={editEntry}
           onStartCreate={startCreate}
+          onStartCreateFolder={() => { setPaletteOpen(false); openCreateFolderDialog(); }}
+          onStartExport={() => { setPaletteOpen(false); navigate('/next/settings'); setExportDialogOpen(true); }}
           onClose={() => setPaletteOpen(false)}
         />
       )}
@@ -1350,6 +1642,64 @@ export default function VaultNextPage(props: VaultNextPageProps) {
                 </button>
               );
             })}
+          </div>
+        </TrappedDialog>
+      )}
+
+      {bulkMoveOpen && (
+        <TrappedDialog label={STR.moveToFolder} onClose={() => setBulkMoveOpen(false)}>
+          <h3>{STR.moveToFolder}</h3>
+          <div className="nx-folderpick" role="listbox" aria-label={STR.moveToFolder}>
+            {[{ id: '', name: STR.noFolder }, ...props.folders.map((f) => ({ id: f.id, name: f.decName || f.name || '' }))].map((folder) => (
+              <button
+                key={folder.id || 'none'}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className="mrow"
+                disabled={bulkBusy}
+                onClick={() => void runBulkMove(folder.id || null)}
+              >
+                <FolderIcon size={13} />{folder.name}
+              </button>
+            ))}
+          </div>
+        </TrappedDialog>
+      )}
+
+      {folderDialog && (
+        <TrappedDialog label={folderDialogTitle} onClose={folderDialogBusy ? undefined : closeFolderDialog}>
+          <h3>{folderDialogTitle}</h3>
+          {folderDialog.mode === 'delete' ? (
+            <div className="nx-help">{STR.deleteFolderMessage}</div>
+          ) : (
+            <div className="nx-field">
+              <input
+                className="nx-input"
+                type="text"
+                aria-label={folderDialogTitle}
+                value={folderNameInput}
+                disabled={folderDialogBusy}
+                onInput={(e) => setFolderNameInput((e.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); void submitFolderDialog(); }
+                  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFolderDialog(); }
+                }}
+              />
+            </div>
+          )}
+          <div className="dfoot">
+            <button type="button" className="nx-btn ghost" disabled={folderDialogBusy} onClick={closeFolderDialog} autoFocus={folderDialog.mode === 'delete'}>
+              {t('txt_cancel')} <span className="nx-kbd">esc</span>
+            </button>
+            <button
+              type="button"
+              className={folderDialog.mode === 'delete' ? 'nx-btn danger-fill' : 'nx-btn'}
+              disabled={folderDialogBusy || (folderDialog.mode !== 'delete' && !folderNameInput.trim())}
+              onClick={() => void submitFolderDialog()}
+            >
+              {folderDialog.mode === 'delete' ? t('txt_delete') : t('txt_save')} <span className="nx-kbd on-fill">↵</span>
+            </button>
           </div>
         </TrappedDialog>
       )}
