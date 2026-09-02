@@ -4,6 +4,7 @@ import type { Env } from '../types';
 // These are the stable store IDs for the official Chromium-based extensions.
 export const OFFICIAL_BITWARDEN_BROWSER_EXTENSION_ORIGINS = [
   'chrome-extension://nngceckbapebfimnlniiiahkandclblb',
+  'chrome-extension://hccnnhgbibccigepcmlgppchkpfdophk',
   'chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh',
   'chrome-extension://ccnckbpmaceehanjmeomladnmlffdjgn',
 ] as const;
