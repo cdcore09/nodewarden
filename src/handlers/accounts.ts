@@ -347,6 +347,7 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
     // Bitwarden creates a readable personal API key with the account. It is
     // returned only after fresh user verification and is excluded from backups.
     apiKey: randomStringAlphanum(LIMITS.auth.clientSecretLength),
+    userKeyId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -641,6 +642,43 @@ export async function handleSetKeys(request: Request, env: Env, userId: string):
   });
 
   return jsonResponse(keysResponse(user));
+}
+
+// POST /api/accounts/key-management/user-key-id
+//
+// Backfills the key id of the caller's current UserKey (bitwarden/clients
+// cli-v2026.9.0, PM-40814: official clients call this once per account,
+// unconditionally, right after login/unlock — a 404 here fails that login).
+// Mirrors bitwarden/server's SetUserKeyIdCommand: one-shot, rejects once a
+// value is already recorded.
+export async function handleSetUserKeyId(request: Request, env: Env, userId: string): Promise<Response> {
+  const storage = new StorageService(env.DB);
+  const user = await storage.getUserById(userId);
+  if (!user) {
+    return errorResponse('User not found', 404);
+  }
+
+  let body: { userKeyId?: string; UserKeyId?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON', 400);
+  }
+
+  const userKeyId = body.userKeyId ?? body.UserKeyId;
+  if (!userKeyId || !/^[0-9a-f]{32}$/.test(userKeyId)) {
+    return errorResponse('UserKeyId is not a valid key id.', 400);
+  }
+
+  if (user.userKeyId) {
+    return errorResponse('User key id is already set.', 400);
+  }
+
+  user.userKeyId = userKeyId;
+  user.updatedAt = new Date().toISOString();
+  await storage.saveUser(user);
+
+  return new Response(null, { status: 200 });
 }
 
 // POST/PUT /api/accounts/password

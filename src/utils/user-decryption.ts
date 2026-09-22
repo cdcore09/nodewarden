@@ -28,7 +28,7 @@ export function buildAccountKeys(user: Pick<User, 'privateKey' | 'publicKey'>): 
 }
 
 export function buildMasterPasswordUnlock(
-  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism'>
+  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism' | 'userKeyId'>
 ): UserDecryptionOptions['MasterPasswordUnlock'] {
   return {
     Kdf: {
@@ -40,12 +40,13 @@ export function buildMasterPasswordUnlock(
     MasterKeyEncryptedUserKey: user.key,
     MasterKeyWrappedUserKey: user.key,
     Salt: user.email.toLowerCase(),
+    ContainedKeyId: user.userKeyId ?? null,
     Object: 'masterPasswordUnlock',
   };
 }
 
 export function buildUserDecryptionOptions(
-  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism'>,
+  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism' | 'userKeyId'>,
   webAuthnPrfOption: WebAuthnPrfDecryptionOption | null = null
 ): UserDecryptionOptions {
   return {
@@ -59,7 +60,7 @@ export function buildUserDecryptionOptions(
 }
 
 export function buildUserDecryptionCompat(
-  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism'>
+  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism' | 'userKeyId'>
 ): Record<string, unknown> {
   return {
     masterPasswordUnlock: {
@@ -72,6 +73,8 @@ export function buildUserDecryptionCompat(
       masterKeyWrappedUserKey: user.key,
       masterKeyEncryptedUserKey: user.key,
       salt: user.email.toLowerCase(),
+      containedKeyId: user.userKeyId ?? null,
     },
+    userKeyId: user.userKeyId ?? null,
   };
 }

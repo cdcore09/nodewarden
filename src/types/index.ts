@@ -66,6 +66,7 @@ export interface User {
   yubikeyKey5: string | null;
   yubikeyNfc: boolean;
   apiKey: string | null;
+  userKeyId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -516,6 +517,7 @@ export interface MasterPasswordUnlock {
   MasterKeyEncryptedUserKey: string;
   MasterKeyWrappedUserKey: string;
   Salt: string;
+  ContainedKeyId: string | null;
   Object: string;
 }
 
@@ -677,6 +679,7 @@ export interface SyncResponse {
       WrappedUserKey1: string;
       WrappedUserKey2: string;
     } | null;
+    UserKeyId?: string | null;
     Object?: string;
   } | null;
   // PascalCase for desktop/browser clients
@@ -693,7 +696,9 @@ export interface SyncResponse {
       masterKeyWrappedUserKey: string;
       masterKeyEncryptedUserKey: string;
       salt: string;
+      containedKeyId: string | null;
     } | null;
+    userKeyId?: string | null;
   } | null;
   object: string;
 }

@@ -24,6 +24,7 @@ import {
   handleDisableTwoFactorProvider,
   handleGetApiKey,
   handleRotateApiKey,
+  handleSetUserKeyId,
 } from './handlers/accounts';
 import {
   handleGetCiphers,
@@ -193,6 +194,10 @@ export async function handleAuthenticatedRoute(
     if (method === 'GET') return handleGetKeys(request, env, userId);
     if (method === 'POST') return handleSetKeys(request, env, userId);
     return errorResponse('Method not allowed', 405);
+  }
+
+  if ((path === '/api/accounts/key-management/user-key-id' || path === '/accounts/key-management/user-key-id') && method === 'POST') {
+    return handleSetUserKeyId(request, env, userId);
   }
 
   if (path === '/api/accounts/totp') {
