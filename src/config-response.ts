@@ -32,6 +32,9 @@ export function buildConfigResponse(origin: string) {
     settings: {
       disableUserRegistration: false,
       suppressOnboardingInterstitials: false,
+      // No outbound mail channel exists on this server, so registration and
+      // account flows never require an email verification step.
+      enableEmailVerification: false,
     },
     _icon_service_url: buildIconServiceTemplate(origin),
     _icon_service_csp: buildIconServiceCsp(origin),
