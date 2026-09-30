@@ -232,6 +232,33 @@ async function writeCipherAudit(
   });
 }
 
+// AES IV length and HMAC-SHA256 MAC length, per Bitwarden's EncString spec —
+// both are protocol constants, not client implementation choices, so every
+// real AesCbc256_B64/AesCbc256_HmacSha256_B64 value decodes to exactly these
+// lengths. Mirrors upstream's EncryptedStringAttribute byte-length map
+// (bitwarden/server v2026.9.2, PM-43287): a piece that is the right count but
+// the wrong decoded length is manipulated/corrupted, not just unusual.
+const ENC_STRING_IV_BYTES = 16;
+const ENC_STRING_MAC_BYTES = 32;
+
+function decodedBase64ByteLength(piece: string): number | null {
+  const converted = piece.replace(/-/g, '+').replace(/_/g, '/');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(converted)) return null;
+  const unpadded = converted.replace(/=+$/, '');
+  const padded = unpadded.length % 4 === 0 ? unpadded : unpadded + '='.repeat(4 - (unpadded.length % 4));
+  try {
+    return atob(padded).length;
+  } catch {
+    return null;
+  }
+}
+
+function isValidEncStringPiece(piece: string, requiredByteLength?: number): boolean {
+  const length = decodedBase64ByteLength(piece);
+  if (length === null) return false;
+  return requiredByteLength === undefined || length === requiredByteLength;
+}
+
 function isValidEncString(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
@@ -244,11 +271,24 @@ function isValidEncString(value: unknown): value is string {
 
   // Bitwarden's legacy symmetric EncString variants require IV + data,
   // while the authenticated AES-CBC-HMAC variant requires IV + data + MAC.
-  if (type === 0 || type === 1 || type === 4) return parts.length >= 2;
-  if (type === 2) return parts.length === 3;
+  if (type === 0 || type === 1 || type === 4) {
+    if (parts.length < 2) return false;
+    // Only the well-defined AesCbc256_B64 shape (exactly iv|ct) has a fixed-length
+    // IV to check; the looser >=2 bucket also covers legacy/rsa-ish variants this
+    // function has always accepted, so leave those piece-count-only as before.
+    if (type === 0 && parts.length === 2 && !isValidEncStringPiece(parts[0], ENC_STRING_IV_BYTES)) return false;
+    return parts.every((part) => isValidEncStringPiece(part));
+  }
+  if (type === 2) {
+    if (parts.length !== 3) return false;
+    if (!isValidEncStringPiece(parts[0], ENC_STRING_IV_BYTES)) return false;
+    if (!isValidEncStringPiece(parts[2], ENC_STRING_MAC_BYTES)) return false;
+    return isValidEncStringPiece(parts[1]);
+  }
 
-  // Keep newer one-part formats, such as COSE Encrypt0, future-compatible.
-  return parts.length >= 1;
+  // Keep newer one-part formats, such as COSE Encrypt0, future-compatible —
+  // still require each piece to be well-formed base64.
+  return parts.length >= 1 && parts.every((part) => isValidEncStringPiece(part));
 }
 
 function optionalEncString(value: unknown): string | null {
